@@ -5,6 +5,8 @@
  * podľa EAN a vracia vendors[] pole s cenami naprieč obchodmi.
  */
 
+import axios from 'axios'
+
 const BASE = 'https://api.cenyslovensko.sk/api'
 const IMG_BASE = 'https://img.cenyslovensko.sk'
 
@@ -16,9 +18,8 @@ const HEADERS = {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: HEADERS })
-  if (!res.ok) throw new Error(`cenyslovensko ${res.status}: ${path}`)
-  return res.json()
+  const res = await axios.get<T>(`${BASE}${path}`, { headers: HEADERS, timeout: 15000 })
+  return res.data
 }
 
 // ─── Mapovanie companyId → názov + img slug ────────────────────────────────
