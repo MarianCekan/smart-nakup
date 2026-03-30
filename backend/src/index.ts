@@ -13,8 +13,16 @@ import { getCache } from './services/cenysk.js'
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'https://smart-nakup.vercel.app',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+]
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))),
   credentials: true,
 }))
 
