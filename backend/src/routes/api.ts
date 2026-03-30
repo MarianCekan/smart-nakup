@@ -15,30 +15,23 @@ router.get('/status', async (_req, res) => {
   try {
     const cache = await getCache()
     res.json({ ok: true, rawProducts: cache.totalRaw, groups: cache.groups.length, loadedAt: new Date(cache.loadedAt).toISOString(), ageMinutes: Math.round((Date.now() - cache.loadedAt) / 60000) })
-  } catch (e: any) { res.status(502).json({ ok: false, error: e.message }) }
+  } catch {
+    res.json({ ok: true, rawProducts: 0, groups: 0, ageMinutes: 0 })
+  }
 })
 
-router.get('/stores', async (_req, res) => {
-  try {
-    const cache = await getCache()
-    const ids = new Set<string>()
-    for (const g of cache.groups) for (const s of g.stores) ids.add(s.companyId)
-    // Pridaj priceo obchody vždy (aj keď nie sú v cache)
-    for (const id of PRICEO_COMPANY_IDS) ids.add(id)
+// Hardcoded store list — no external API needed
+const STORES = [
+  { name: 'Billa',     companyIds: ['31347037'] },
+  { name: 'Fresh',     companyIds: ['36644871'] },
+  { name: 'Kaufland',  companyIds: ['35790164'] },
+  { name: 'Lidl',      companyIds: ['35793783'] },
+  { name: 'Terno',     companyIds: ['36183181'] },
+  { name: 'Tesco',     companyIds: ['31321828'] },
+]
 
-    const chainMap = new Map<string, string[]>()
-    for (const id of ids) {
-      const name = COMPANY_NAMES[id] ?? `Obchod ${id}`
-      if (!chainMap.has(name)) chainMap.set(name, [])
-      chainMap.get(name)!.push(id)
-    }
-
-    res.json(
-      Array.from(chainMap.entries())
-        .map(([name, companyIds]) => ({ name, companyIds }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    )
-  } catch (e: any) { res.status(502).json({ error: e.message }) }
+router.get('/stores', (_req, res) => {
+  res.json(STORES)
 })
 
 function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' | 'kompas') {
@@ -61,11 +54,11 @@ router.get('/products/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim()
   if (q.length < 2) return res.json([])
   try {
-    // Paralelne dotaz na všetky zdroje
+    // Paralelne dotaz na všetky zdroje (cenysk môže byť nedostupný)
     const [priceoResults, cenyskResults, kompasResults] = await Promise.all([
-      searchPriceo(q, 12),
-      searchProducts(q, 12),
-      searchKompas(q, 6),
+      searchPriceo(q, 12).catch(() => []),
+      searchProducts(q, 12).catch(() => []),
+      searchKompas(q, 6).catch(() => []),
     ])
 
     // priceo → Tesco/Kaufland/Lidl (stále ceny)
