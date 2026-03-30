@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api, Store, ProductHit, OptimizeResult, NeedsApproval } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
+import { authClient } from './lib/authClient'
 
 const COLORS: Record<string, { main: string; bg: string; text?: string; abbr: string }> = {
   'Lidl':     { main: '#0050AA', bg: '#e8f0fb', abbr: 'L' },
@@ -528,9 +529,144 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
+// ─── AuthInput helper ─────────────────────────────────────────────────────────
+function AuthInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input {...props} style={{
+      width: '100%', padding: '12px 14px', fontSize: 15,
+      border: '2px solid #e2e8f0', borderRadius: 10, outline: 'none',
+      fontFamily: 'inherit', boxSizing: 'border-box', color: '#1a202c',
+      ...props.style,
+    }} />
+  )
+}
+
+// ─── LoginScreen ──────────────────────────────────────────────────────────────
+function LoginScreen({ onSwitch, onBack, onSuccess }: { onSwitch: () => void; onBack: () => void; onSuccess: () => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true); setError('')
+    const res = await authClient.signIn.email({ email, password })
+    setLoading(false)
+    if (res.error) setError(res.error.message ?? 'Prihlásenie zlyhalo')
+    else onSuccess()
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+          <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Prihlásiť sa</h2>
+          <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>SmartNákup — tvoj nákupný optimalizátor</p>
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
+            <AuthInput type="password" placeholder="Heslo" value={password} onChange={e => setPassword(e.target.value)} required />
+            {error && <div style={{ color: '#dc2626', fontSize: 13, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{error}</div>}
+            <button type="submit" disabled={loading} style={{
+              padding: '13px', fontSize: 15, fontWeight: 700,
+              background: loading ? '#94a3b8' : '#2563eb', color: '#fff',
+              border: 'none', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer', marginTop: 4,
+            }}>{loading ? 'Prihlasujem...' : 'Prihlásiť sa'}</button>
+          </form>
+          <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: '#64748b' }}>
+            Nemáš účet?{' '}
+            <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: 14, padding: 0 }}>
+              Zaregistruj sa
+            </button>
+          </div>
+          <button onClick={onBack} style={{ marginTop: 16, width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
+            Pokračovať bez prihlásenia
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── RegisterScreen ───────────────────────────────────────────────────────────
+function RegisterScreen({ onSwitch, onBack, onVerify }: { onSwitch: () => void; onBack: () => void; onVerify: (email: string) => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password.length < 8) { setError('Heslo musí mať aspoň 8 znakov'); return }
+    setLoading(true); setError('')
+    const res = await authClient.signUp.email({ email, password, name })
+    setLoading(false)
+    if (res.error) setError(res.error.message ?? 'Registrácia zlyhala')
+    else onVerify(email)
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+          <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Registrácia</h2>
+          <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Vytvor si bezplatný účet</p>
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <AuthInput type="text" placeholder="Meno" value={name} onChange={e => setName(e.target.value)} required />
+            <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
+            <AuthInput type="password" placeholder="Heslo (min. 8 znakov)" value={password} onChange={e => setPassword(e.target.value)} required />
+            {error && <div style={{ color: '#dc2626', fontSize: 13, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{error}</div>}
+            <button type="submit" disabled={loading} style={{
+              padding: '13px', fontSize: 15, fontWeight: 700,
+              background: loading ? '#94a3b8' : '#1a7f37', color: '#fff',
+              border: 'none', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer', marginTop: 4,
+            }}>{loading ? 'Registrujem...' : 'Vytvoriť účet'}</button>
+          </form>
+          <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: '#64748b' }}>
+            Už máš účet?{' '}
+            <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: 14, padding: 0 }}>
+              Prihlásiť sa
+            </button>
+          </div>
+          <button onClick={onBack} style={{ marginTop: 16, width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
+            Pokračovať bez prihlásenia
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── VerifyEmailScreen ────────────────────────────────────────────────────────
+function VerifyEmailScreen({ email, onBack }: { email: string; onBack: () => void }) {
+  return (
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Skontroluj e-mail</h2>
+          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 8 }}>
+            Poslali sme overovací link na:
+          </p>
+          <p style={{ fontWeight: 700, color: '#1a202c', marginBottom: 24 }}>{email}</p>
+          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 24 }}>
+            Po overení sa môžeš prihlásiť a ukladať nákupné zoznamy do cloudu.
+          </p>
+          <button onClick={onBack} style={{ width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
+            Pokračovať bez prihlásenia
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState<'main' | 'saved'>('main')
+  const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify'>('main')
+  const [verifyEmail, setVerifyEmail] = useState('')
+  const { data: session, isPending: sessionLoading } = authClient.useSession()
   const [stores, setStores] = useState<Store[]>([])
   const [selectedNames, setSelectedNames] = useState<string[]>([])
   const [cartItems, setCartItems] = useState<CartItem[]>([])
@@ -617,6 +753,9 @@ export default function App() {
     await runOptimize(newItems)
   }
 
+  if (screen === 'login') return <LoginScreen onSwitch={() => setScreen('register')} onBack={() => setScreen('main')} onSuccess={() => setScreen('main')} />
+  if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => setScreen('main')} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
+  if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
   if (screen === 'saved') return <SavedListsScreen onBack={() => setScreen('main')} />
 
   return (
@@ -631,7 +770,17 @@ export default function App() {
               {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· {cacheInfo.rawProducts} produktov · cache pred {cacheInfo.ageMinutes} min</span>}
             </p>
           </div>
-          <button onClick={() => setScreen('saved')} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>📋 Moje zoznamy</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!sessionLoading && (
+              session
+                ? <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>{session.user.email}</span>
+                    <button onClick={() => authClient.signOut()} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#64748b' }}>Odhlásiť</button>
+                  </div>
+                : <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
+            )}
+            {session && <button onClick={() => setScreen('saved')} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>📋 Moje zoznamy</button>}
+          </div>
         </div>
 
         {/* Krok 1 */}
@@ -733,12 +882,14 @@ export default function App() {
               </div>
             )}
             {result.stores.length > 0 && (
-              <button onClick={saveResult} style={{
+              <button onClick={session ? saveResult : () => setScreen('login')} style={{
                 marginTop: 14, width: '100%', padding: '14px', fontSize: 15, fontWeight: 700,
-                background: '#fff', color: '#2563eb', border: '2px solid #2563eb', borderRadius: 14,
-                cursor: 'pointer',
+                background: session ? '#fff' : '#f1f5f9',
+                color: session ? '#2563eb' : '#94a3b8',
+                border: `2px solid ${session ? '#2563eb' : '#cbd5e1'}`,
+                borderRadius: 14, cursor: 'pointer',
               }}>
-                💾 Uložiť nákupné zoznamy
+                {session ? '💾 Uložiť nákupné zoznamy' : '🔒 Prihlásiť sa pre uloženie zoznamov'}
               </button>
             )}
           </div>
