@@ -213,10 +213,21 @@ export async function getCache(): Promise<Cache> {
   return _loading
 }
 
+// ─── Circuit breaker — skip cenysk for 5 min after failure ───────────────────
+let _cenyskDownUntil = 0
+
 // ─── Search ───────────────────────────────────────────────────────────────────
 
 export async function searchProducts(query: string, limit = 12): Promise<ProductGroup[]> {
-  const { groups } = await getCache()
+  if (Date.now() < _cenyskDownUntil) return []
+  let groups: ProductGroup[]
+  try {
+    const cache = await getCache()
+    groups = cache.groups
+  } catch {
+    _cenyskDownUntil = Date.now() + 5 * 60 * 1000
+    return []
+  }
   const q = deaccent(query.trim())
   if (q.length < 2) return []
 
