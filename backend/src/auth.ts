@@ -27,11 +27,12 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
-      // Redirect after verification should go to frontend, not backend
-      const verifyUrl = url.replace('callbackURL=%2F', 'callbackURL=http%3A%2F%2Flocalhost%3A5173')
+      // Redirect after verification should go to frontend
+      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+      const verifyUrl = url.replace(/callbackURL=[^&]+/, `callbackURL=${encodeURIComponent(frontendUrl)}`)
       console.log(`📧 Posielam overovací email na ${user.email}, url: ${verifyUrl}`)
       const result = await resend.emails.send({
-        from: 'SmartNákup <onboarding@resend.dev>',
+        from: 'SmartNákup <noreply@kvalityweb.sk>',
         to: user.email,
         subject: 'Potvrďte svoju e-mailovú adresu',
         html: `
