@@ -18,7 +18,7 @@ const HEADERS = {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await axios.get<T>(`${BASE}${path}`, { headers: HEADERS, timeout: 15000 })
+  const res = await axios.get<T>(`${BASE}${path}`, { headers: HEADERS, timeout: 4000 })
   return res.data
 }
 

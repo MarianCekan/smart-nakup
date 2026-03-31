@@ -100,7 +100,7 @@ export async function searchPriceo(query: string, limit = 12): Promise<ProductGr
   const url = `${BASE}/search.php?search=${encodeURIComponent(query)}&include_discounts=1`
   let raw: PriceoProduct[]
   try {
-    const res = await axios.get<PriceoProduct[]>(url, { headers: HEADERS, timeout: 8000 })
+    const res = await axios.get<PriceoProduct[]>(url, { headers: HEADERS, timeout: 5000 })
     raw = res.data
   } catch {
     return []
