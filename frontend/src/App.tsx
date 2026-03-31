@@ -148,6 +148,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
       {open && suggestions.length > 0 && (
         <ul
           onMouseDown={e => e.preventDefault()}
+          onTouchMove={() => inputRef.current?.blur()}
           style={{
           position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 200,
           background: '#fff', border: '2px solid #3b82f6', borderRadius: 14,
