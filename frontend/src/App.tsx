@@ -91,6 +91,22 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const debouncedQ = useDebounce(value, 280)
   const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown only when tapping/clicking outside the whole component
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('touchstart', handleOutside, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('touchstart', handleOutside)
+    }
+  }, [])
 
   useEffect(() => {
     if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); return }
@@ -119,15 +135,17 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <div style={{ flex: 1, position: 'relative' }}>
           <input
             ref={inputRef} value={value}
             onChange={e => setValue(e.target.value)}
             onKeyDown={handleKey}
-            onBlur={() => setTimeout(() => setOpen(false), 200)}
-            onFocus={() => suggestions.length > 0 && setOpen(true)}
+            onFocus={() => {
+              if (suggestions.length > 0) setOpen(true)
+              setTimeout(() => inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300)
+            }}
             placeholder="Napr. mlieko, vajcia, gouda..."
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
             enterKeyHint="search"
@@ -148,13 +166,13 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
       {open && suggestions.length > 0 && (
         <ul
           onMouseDown={e => e.preventDefault()}
-          onTouchMove={() => inputRef.current?.blur()}
+          onTouchMove={() => { inputRef.current?.blur() /* hide keyboard, keep dropdown open */ }}
           style={{
-          position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 200,
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
           background: '#fff', border: '2px solid #3b82f6', borderRadius: 14,
           padding: 6, margin: 0, listStyle: 'none',
-          boxShadow: '0 -4px 32px rgba(0,0,0,0.13)',
-          maxHeight: 'min(340px, 45vh)', overflowY: 'auto',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
+          maxHeight: '220px', overflowY: 'auto',
         }}>
           {suggestions.map((hit, i) => {
             const c = col(hit.bestStore)
