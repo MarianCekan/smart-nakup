@@ -103,7 +103,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
 
   const commit = useCallback((item: CartItem) => {
     onAdd(item); setValue(''); setSuggestions([]); setOpen(false)
-    inputRef.current?.focus()
+    inputRef.current?.blur() // skryje klávesnicu na mobile
   }, [onAdd])
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -126,11 +126,13 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
             ref={inputRef} value={value}
             onChange={e => setValue(e.target.value)}
             onKeyDown={handleKey}
-            onBlur={() => setTimeout(() => setOpen(false), 160)}
+            onBlur={() => setTimeout(() => setOpen(false), 200)}
             onFocus={() => suggestions.length > 0 && setOpen(true)}
             placeholder="Napr. mlieko, vajcia, gouda..."
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+            enterKeyHint="search"
             style={{
-              width: '100%', padding: '13px 40px 13px 16px', fontSize: 15,
+              width: '100%', padding: '13px 40px 13px 16px', fontSize: 16,
               border: '2px solid #e2e8f0', borderRadius: 12, outline: 'none',
               fontFamily: 'inherit', boxSizing: 'border-box', color: '#1a202c',
             }}
@@ -148,14 +150,15 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
           background: '#fff', border: '2px solid #3b82f6', borderRadius: 14,
           padding: 6, margin: 0, listStyle: 'none',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.13)', maxHeight: 360, overflowY: 'auto',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.13)',
+          maxHeight: 'min(360px, 40vh)', overflowY: 'auto',
         }}>
           {suggestions.map((hit, i) => {
             const c = col(hit.bestStore)
             const unitLabel = hit.unit === 'g' ? 'kg' : hit.unit === 'ml' ? 'l' : hit.unit
             return (
               <li key={hit.groupKey}
-                onMouseDown={() => commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl })}
+                onPointerDown={e => { e.preventDefault(); commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl }) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', background: i === activeIdx ? '#eff6ff' : 'transparent' }}>
                 <ProductImg src={hit.imageUrl} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
