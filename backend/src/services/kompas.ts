@@ -62,9 +62,15 @@ function extractSlugs(html: string): string[] {
 async function fetchHtml(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, { headers: HEADERS })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.log(`kompas fetchHtml ${res.status} ${res.statusText} — ${url}`)
+      return null
+    }
     return res.text()
-  } catch { return null }
+  } catch (e: any) {
+    console.log(`kompas fetchHtml error: ${e.message} — ${url}`)
+    return null
+  }
 }
 
 async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
