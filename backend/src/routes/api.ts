@@ -189,8 +189,10 @@ router.post('/optimize', async (req, res) => {
     const priceoNeedsApproval: any[] = []
 
     for (const { query, groupKey, group: rawGroup } of resolvedPriceo) {
-      // Ak kompas má lepšiu (akciovú) cenu, mergni
-      const kompasForItem = await searchKompas(query, 3).catch(() => [])
+      // Kompas lookup: skús prvé slovo názvu produktu (najpravdepodobnejšie čo user hľadal)
+      // Napr. "Mlieko polotučné 1,5% 1l" → "mlieko" → cache hit z predchádzajúceho searchu
+      const kompasQuery = rawGroup.nameLower.split(/[\s,]+/)[0]
+      const kompasForItem = await searchKompas(kompasQuery, 3).catch(() => [])
       const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
 
       const eligible = (allowedPriceo.length > 0
