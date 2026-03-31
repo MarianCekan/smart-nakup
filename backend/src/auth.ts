@@ -14,8 +14,11 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? 'fallback-secret',
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
   advanced: {
-    crossSubdomainCookies: { enabled: false },
-    useSecureCookies: process.env.NODE_ENV === 'production' || !!process.env.BETTER_AUTH_URL?.startsWith('https'),
+    useSecureCookies: process.env.BETTER_AUTH_URL?.startsWith('https') ?? false,
+    defaultCookieAttributes: process.env.BETTER_AUTH_URL?.startsWith('https')
+      ? { sameSite: 'none', secure: true }
+      : { sameSite: 'lax', secure: false },
+    disableCSRFCheck: true,
   },
   trustedOrigins: [
     'http://localhost:5173',
