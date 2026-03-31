@@ -81,18 +81,27 @@ function toProductGroup(p: PriceoProduct): ProductGroup | null {
   }
 }
 
+import axios from 'axios'
+
 // Session cache: groupKey → ProductGroup (platné po dobu behu servera)
 const _sessionCache = new Map<string, ProductGroup>()
+
+// Query cache: query → výsledky (10 minút)
+const _queryCache = new Map<string, { results: ProductGroup[]; ts: number }>()
+const QUERY_TTL = 10 * 60 * 1000
 
 export async function searchPriceo(query: string, limit = 12): Promise<ProductGroup[]> {
   if (query.trim().length < 2) return []
 
+  const key = query.trim().toLowerCase()
+  const cached = _queryCache.get(key)
+  if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results.slice(0, limit)
+
   const url = `${BASE}/search.php?search=${encodeURIComponent(query)}&include_discounts=1`
   let raw: PriceoProduct[]
   try {
-    const res = await fetch(url, { headers: HEADERS })
-    if (!res.ok) return []
-    raw = await res.json()
+    const res = await axios.get<PriceoProduct[]>(url, { headers: HEADERS, timeout: 8000 })
+    raw = res.data
   } catch {
     return []
   }
@@ -105,7 +114,9 @@ export async function searchPriceo(query: string, limit = 12): Promise<ProductGr
     results.push(group)
   }
 
-  return results.slice(0, limit)
+  const sliced = results.slice(0, limit)
+  if (sliced.length) _queryCache.set(key, { results: sliced, ts: Date.now() })
+  return sliced
 }
 
 export function getPriceoFromCache(groupKey: string): ProductGroup | undefined {
