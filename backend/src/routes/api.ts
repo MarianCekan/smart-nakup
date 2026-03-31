@@ -205,9 +205,11 @@ router.post('/optimize', async (req, res) => {
       const kompasForItem = await searchKompas(kompasQuery, 3).catch(() => [])
       const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
 
-      const eligible = (allowedPriceo.length > 0
-        ? group.stores.filter((s: any) => allowedPriceo.includes(s.companyId))
-        : group.stores)
+      const eligible = (company_ids.length === 0
+        ? group.stores  // žiadny filter → všetky obchody
+        : allowedPriceo.length > 0
+          ? group.stores.filter((s: any) => allowedPriceo.includes(s.companyId))
+          : [])  // user vybral len cenysk obchody → priceo položka tam nie je
 
       if (!eligible.length) {
         // Hľadaj alternatívu
