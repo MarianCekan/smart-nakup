@@ -72,10 +72,10 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
   const stores = [...group.stores]
   for (const ks of kMatch.stores) {
     const idx = stores.findIndex((s: any) => s.companyId === ks.companyId)
-    if (idx >= 0) {
-      if (ks.price < stores[idx].price) stores[idx] = { ...ks, isPromo: true }
-    } else {
-      stores.push({ ...ks, isPromo: true })
+    // Len updatni cenu ak obchod už existuje v priceo — nepridávaj nové obchody
+    // (kompas "mlieko" kategória má ceny za rôzne druhy mlieka, nie konkrétny produkt)
+    if (idx >= 0 && ks.price < stores[idx].price) {
+      stores[idx] = { ...ks, isPromo: true }
     }
   }
   stores.sort((a: any, b: any) => a.price - b.price)
