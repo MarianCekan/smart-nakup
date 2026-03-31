@@ -887,7 +887,7 @@ export default function App() {
 
         {result && (
           <div>
-            {result.total_saving > 0 && (
+            {result.total_saving > 0 && result.stores.length >= 2 && (
               <div style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '2px solid #bbf7d0', borderRadius: 14, padding: '14px 18px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 700, color: '#15803d' }}>Ušetríš oproti najdrahšiemu obchodu</div>
