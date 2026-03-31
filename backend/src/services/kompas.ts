@@ -166,10 +166,17 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
   if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results
 
   // Race: scrape vs timeout 1.5s
-  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 3000))
+  const start = Date.now()
+  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 5000))
   const results = await Promise.race([_doSearch(query, limit), timeout])
+  const elapsed = Date.now() - start
 
-  if (results.length) _queryCache.set(key, { results, ts: Date.now() })
+  if (results.length) {
+    _queryCache.set(key, { results, ts: Date.now() })
+    console.log(`✅ kompas "${query}": ${results.length} výsledkov za ${elapsed}ms`)
+  } else {
+    console.log(`⏱️ kompas "${query}": timeout/no results po ${elapsed}ms`)
+  }
   return results
 }
 
