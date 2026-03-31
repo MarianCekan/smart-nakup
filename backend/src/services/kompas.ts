@@ -8,6 +8,9 @@ import type { ProductGroup, StorePrice } from './cenysk.js'
 
 const BASE = 'https://kompaszliav.sk'
 
+// Ak KOMPAS_PROXY je nastavené, fetchujeme cez Vercel proxy (obchádza IP blokovanie)
+const PROXY = process.env.KOMPAS_PROXY ?? ''  // napr. https://smart-nakup.vercel.app/api/kompas-proxy
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml',
@@ -61,9 +64,10 @@ function extractSlugs(html: string): string[] {
 
 async function fetchHtml(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { headers: HEADERS })
+    const fetchUrl = PROXY ? `${PROXY}?url=${encodeURIComponent(url)}` : url
+    const res = await fetch(fetchUrl, { headers: PROXY ? {} : HEADERS })
     if (!res.ok) {
-      console.log(`kompas fetchHtml ${res.status} ${res.statusText} — ${url}`)
+      console.log(`kompas fetchHtml ${res.status} — ${url}`)
       return null
     }
     return res.text()
