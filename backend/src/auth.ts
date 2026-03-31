@@ -13,6 +13,10 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? 'fallback-secret',
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
+  advanced: {
+    crossSubdomainCookies: { enabled: false },
+    useSecureCookies: process.env.NODE_ENV === 'production' || !!process.env.BETTER_AUTH_URL?.startsWith('https'),
+  },
   trustedOrigins: [
     'http://localhost:5173',
     'http://localhost:5174',
