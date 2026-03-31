@@ -146,19 +146,21 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
       </div>
 
       {open && suggestions.length > 0 && (
-        <ul style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+        <ul
+          onMouseDown={e => e.preventDefault()}
+          style={{
+          position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 200,
           background: '#fff', border: '2px solid #3b82f6', borderRadius: 14,
           padding: 6, margin: 0, listStyle: 'none',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.13)',
-          maxHeight: 'min(360px, 40vh)', overflowY: 'auto',
+          boxShadow: '0 -4px 32px rgba(0,0,0,0.13)',
+          maxHeight: 'min(340px, 45vh)', overflowY: 'auto',
         }}>
           {suggestions.map((hit, i) => {
             const c = col(hit.bestStore)
             const unitLabel = hit.unit === 'g' ? 'kg' : hit.unit === 'ml' ? 'l' : hit.unit
             return (
               <li key={hit.groupKey}
-                onPointerDown={e => { e.preventDefault(); commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl }) }}
+                onClick={() => commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl })}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', background: i === activeIdx ? '#eff6ff' : 'transparent' }}>
                 <ProductImg src={hit.imageUrl} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
