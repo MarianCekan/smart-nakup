@@ -64,8 +64,15 @@ function simplifyQuery(name: string): string {
 function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
   const kMatch = kompasResults.find(k => {
     const a = k.nameLower, b = group.nameLower
-    return a === b || a.includes(b) || b.includes(a) ||
-      a.split(' ').some((w: string) => w.length > 3 && b.includes(w))
+    if (a === b) return true
+    // Vyžaduj aspoň 2 zmysluplné slová v kompas názve — generické single-word kategórie (napr. "mlieko")
+    // nesmú matchovať všetky varianty (polotučné vs plnotučné sú iné produkty)
+    const aWords = a.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
+    const bWords = b.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
+    if (aWords.length < 2) return false // príliš generický názov
+    const shorter = aWords.length <= bWords.length ? aWords : bWords
+    const longer  = aWords.length <= bWords.length ? bWords : aWords
+    return shorter.every((w: string) => longer.some((lw: string) => lw.includes(w) || w.includes(lw)))
   })
   if (!kMatch) return group
 
