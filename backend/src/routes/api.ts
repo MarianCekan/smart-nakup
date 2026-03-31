@@ -50,6 +50,29 @@ function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' 
   }
 }
 
+// Merge kompas promo stores into a priceo/cenysk group — lower price always wins
+function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
+  const kMatch = kompasResults.find(k => {
+    const a = k.nameLower, b = group.nameLower
+    return a === b || a.includes(b) || b.includes(a) ||
+      a.split(' ').some((w: string) => w.length > 3 && b.includes(w))
+  })
+  if (!kMatch) return group
+
+  const stores = [...group.stores]
+  for (const ks of kMatch.stores) {
+    const idx = stores.findIndex((s: any) => s.companyId === ks.companyId)
+    if (idx >= 0) {
+      if (ks.price < stores[idx].price) stores[idx] = { ...ks, isPromo: true }
+    } else {
+      stores.push({ ...ks, isPromo: true })
+    }
+  }
+  stores.sort((a: any, b: any) => a.price - b.price)
+  const best = stores[0]
+  return { ...group, stores, bestPrice: best.price, bestUnitPrice: best.unitPrice, bestStore: best.storeName, bestImageUrl: group.bestImageUrl || best.imageUrl }
+}
+
 router.get('/products/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim()
   if (q.length < 2) return res.json([])
@@ -71,16 +94,20 @@ router.get('/products/search', async (req, res) => {
         return { ...g, bestPrice: best.price, bestUnitPrice: best.unitPrice, bestStore: best.storeName, bestImageUrl: best.imageUrl }
       })
 
-    // kompas → akciové ceny (len obchody čo nie sú pokryté inak, alebo lepšia cena)
-    // Odfiltruj z kompas tie čo už priceo/cenysk pokrýva lepšie
-    const priceoNames = new Set(priceoResults.map(g => g.nameLower))
-    const kompasFiltered = kompasResults.filter(g => !priceoNames.has(g.nameLower))
+    // Merge kompas promo ceny do priceo/cenysk výsledkov (nižšia cena vyhráva)
+    const priceoMerged = priceoResults.map(g => mergeKompasIntoGroup(g, kompasResults))
+    const cenyskMerged = cenyskFiltered.map(g => mergeKompasIntoGroup(g, kompasResults))
 
-    // Zlúč: priceo prvé, potom cenysk, potom kompas akcie
+    // Kompas produkty ktoré nie sú v priceo/cenysk → zobraz samostatne
+    const allMergedNames = new Set([...priceoMerged, ...cenyskMerged].map(g => g.nameLower))
+    const kompasOnly = kompasResults.filter(k => {
+      return ![...allMergedNames].some(n => n === k.nameLower || n.includes(k.nameLower) || k.nameLower.includes(n))
+    })
+
     const merged = [
-      ...priceoResults.map(g => toHit(g, 'priceo')),
-      ...cenyskFiltered.map(g => toHit(g, 'cenysk')),
-      ...kompasFiltered.map(g => toHit(g, 'kompas')),
+      ...priceoMerged.map(g => toHit(g, 'priceo')),
+      ...cenyskMerged.map(g => toHit(g, 'cenysk')),
+      ...kompasOnly.map(g => toHit(g, 'kompas')),
     ].slice(0, 20)
 
     res.json(merged)
@@ -158,7 +185,11 @@ router.post('/optimize', async (req, res) => {
     const priceoUnmatched: string[] = []
     const priceoNeedsApproval: any[] = []
 
-    for (const { query, groupKey, group } of resolvedPriceo) {
+    for (const { query, groupKey, group: rawGroup } of resolvedPriceo) {
+      // Ak kompas má lepšiu (akciovú) cenu, mergni
+      const kompasForItem = await searchKompas(query, 3).catch(() => [])
+      const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
+
       const eligible = (allowedPriceo.length > 0
         ? group.stores.filter((s: any) => allowedPriceo.includes(s.companyId))
         : group.stores)

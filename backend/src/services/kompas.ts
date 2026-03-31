@@ -166,7 +166,7 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
   if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results
 
   // Race: scrape vs timeout 1.5s
-  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 1500))
+  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 3000))
   const results = await Promise.race([_doSearch(query, limit), timeout])
 
   if (results.length) _queryCache.set(key, { results, ts: Date.now() })
