@@ -50,6 +50,16 @@ function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' 
   }
 }
 
+// Zjednodušenie query na hľadanie alternatív — prvé 1-2 zmysluplné slová
+function simplifyQuery(name: string): string {
+  const stop = new Set(['z', 'a', 'v', 'na', 'do', 'zo', 'pre', 'pri', 'po', 'so', 'ku', 'i'])
+  const words = name.toLowerCase()
+    .replace(/\d+\s*(ks|g|kg|ml|l|%|cm|mm)/gi, '') // odstráň množstvá
+    .split(/[\s,+&/]+/)
+    .filter(w => w.length > 2 && !stop.has(w))
+  return words.slice(0, 2).join(' ').trim()
+}
+
 // Merge kompas promo stores into a priceo/cenysk group — lower price always wins
 function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
   const kMatch = kompasResults.find(k => {
@@ -202,8 +212,19 @@ router.post('/optimize', async (req, res) => {
       if (!eligible.length) {
         // Hľadaj alternatívu
         if (company_ids.length > 0) {
-          const alts = await searchPriceo(query, 10)
-          const alt = alts.find(a => a.groupKey !== group.groupKey && a.stores.some((s: any) => allowedPriceo.includes(s.companyId)))
+          const findAlt = (results: any[]) =>
+            results.find((a: any) => a.groupKey !== group.groupKey && a.stores.some((s: any) => allowedPriceo.includes(s.companyId)))
+
+          // 1. skús plný názov, 2. fallback na zjednodušený (napr. "vajcia" namiesto "vajcia z podstielkového chovu M a L 10ks")
+          let alts = await searchPriceo(group.name, 10)
+          let alt = findAlt(alts)
+          if (!alt) {
+            const simple = simplifyQuery(group.name)
+            if (simple && simple !== group.nameLower) {
+              alts = await searchPriceo(simple, 10)
+              alt = findAlt(alts)
+            }
+          }
           if (alt) {
             const bestAlt = alt.stores.find((s: any) => allowedPriceo.includes(s.companyId))!
             priceoNeedsApproval.push({ originalQuery: query, originalGroupKey: groupKey, suggested: { groupKey: alt.groupKey, name: alt.name, unit: alt.unit, packageSize: alt.packageSize, imageUrl: bestAlt.imageUrl ?? alt.bestImageUrl, price: bestAlt.price, unitPrice: bestAlt.unitPrice, storeName: bestAlt.storeName, isPromo: bestAlt.isPromo } })
