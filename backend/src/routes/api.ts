@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { getCache, searchProducts, optimizeCart, COMPANY_NAMES } from '../services/cenysk.js'
 import { searchPriceo, getPriceoFromCache, ensurePriceoGroup } from '../services/priceo.js'
-import { searchKompas, getKompasFromCache } from '../services/kompas.js'
+import { searchKompas, getKompasFromCache, getKompasQueryCache } from '../services/kompas.js'
 
 export const router = Router()
 
@@ -77,12 +77,15 @@ router.get('/products/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim()
   if (q.length < 2) return res.json([])
   try {
-    // Paralelne dotaz na všetky zdroje (cenysk môže byť nedostupný)
-    const [priceoResults, cenyskResults, kompasResults] = await Promise.all([
+    // Paralelne dotaz na priceo + cenysk
+    const [priceoResults, cenyskResults] = await Promise.all([
       searchPriceo(q, 12).catch(() => []),
       searchProducts(q, 12).catch(() => []),
-      searchKompas(q, 6).catch(() => []),
     ])
+
+    // Kompas: ak je v cache → použij hneď; inak spusti na pozadí (rýchla odozva)
+    const kompasResults = getKompasQueryCache(q) ?? []
+    if (!kompasResults.length) searchKompas(q, 6).catch(() => {})
 
     // priceo → Tesco/Kaufland/Lidl (stále ceny)
     // cenyslovensko → filtruj len Terno/Billa/Fresh (ostatné pokrýva priceo)

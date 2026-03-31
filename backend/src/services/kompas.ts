@@ -134,7 +134,7 @@ const _cache = new Map<string, ProductGroup>()
 
 // Query cache: query → { results, ts }
 const _queryCache = new Map<string, { results: ProductGroup[]; ts: number }>()
-const QUERY_TTL = 10 * 60 * 1000  // 10 min
+const QUERY_TTL = 2 * 60 * 60 * 1000  // 2 hodiny — letákové ceny sa menia raz za týždeň
 
 async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> {
   const searchUrl = `${BASE}/hladaj?f=${encodeURIComponent(query)}`
@@ -192,4 +192,12 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
 
 export function getKompasFromCache(groupKey: string): ProductGroup | undefined {
   return _cache.get(groupKey)
+}
+
+// Vráti cache-ované výsledky pre query ak existujú, inak undefined
+export function getKompasQueryCache(query: string): ProductGroup[] | undefined {
+  const key = deaccent(query.trim())
+  const cached = _queryCache.get(key)
+  if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results
+  return undefined
 }
