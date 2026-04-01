@@ -110,11 +110,20 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
 
   useEffect(() => {
     if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); return }
+    let cancelled = false
     setLoading(true)
     api.search(debouncedQ)
-      .then(hits => { setSuggestions(hits); setOpen(hits.length > 0); setActiveIdx(-1) })
+      .then(hits => { if (!cancelled) { setSuggestions(hits); setOpen(hits.length > 0); setActiveIdx(-1) } })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    // Kompas beží na pozadí ~4s — po 5s re-fetchni aby sa zobrazili akciové ceny
+    const refresh = setTimeout(() => {
+      if (cancelled) return
+      api.search(debouncedQ)
+        .then(hits => { if (!cancelled) setSuggestions(hits) })
+        .catch(() => {})
+    }, 5000)
+    return () => { cancelled = true; clearTimeout(refresh) }
   }, [debouncedQ])
 
   const commit = useCallback((item: CartItem) => {
