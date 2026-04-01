@@ -69,7 +69,9 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
     // nesmú matchovať všetky varianty (polotučné vs plnotučné sú iné produkty)
     const aWords = a.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
     const bWords = b.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
-    if (aWords.length < 2) return false // príliš generický názov
+    if (!aWords.length || !bWords.length) return false
+    // Ak kompas má 1 slovo, matchuj len ak je to prvé slovo aj priceo produktu
+    if (aWords.length === 1) return bWords[0] === aWords[0]
     const shorter = aWords.length <= bWords.length ? aWords : bWords
     const longer  = aWords.length <= bWords.length ? bWords : aWords
     return shorter.every((w: string) => longer.some((lw: string) => lw.includes(w) || w.includes(lw)))
@@ -208,7 +210,7 @@ router.post('/optimize', async (req, res) => {
     for (const { query, groupKey, group: rawGroup } of resolvedPriceo) {
       // Kompas lookup: skús prvé slovo názvu produktu (najpravdepodobnejšie čo user hľadal)
       // Napr. "Mlieko polotučné 1,5% 1l" → "mlieko" → cache hit z predchádzajúceho searchu
-      const kompasQuery = rawGroup.nameLower.split(/[\s,]+/)[0]
+      const kompasQuery = simplifyQuery(rawGroup.nameLower)
       const kompasForItem = await searchKompas(kompasQuery, 3).catch(() => [])
       const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
 
