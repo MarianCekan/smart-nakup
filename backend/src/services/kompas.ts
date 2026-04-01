@@ -39,6 +39,15 @@ function deaccent(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
+// Extrakcia cropped product image — pattern: {slug}--{itemId}.jpg (NIE leták)
+function extractProductImage(html: string): string | null {
+  const re = /src=["']((?:https:\/\/kompaszliav\.sk)?\/public\/gimg\/[^"']+--\d+\.jpg)["']/i
+  const m = re.exec(html)
+  if (!m) return null
+  const url = m[1]
+  return url.startsWith('http') ? url : `${BASE}${url}`
+}
+
 // Jednoduchý regex extract JSON-LD z HTML
 function extractJsonLd(html: string): any[] {
   const results: any[] = []
@@ -112,13 +121,18 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
         price,
         unitPrice: price,
         isPromo: true,
-        imageUrl: product.image ?? null,
+        imageUrl: null, // nastavíme nižšie po extrakcii
       })
     }
   }
 
   if (!stores.length) return null
   stores.sort((a, b) => a.price - b.price)
+
+  // Cropped product image z HTML (nie JSON-LD ktorý dáva celý leták)
+  const productImage = extractProductImage(html)
+  for (const s of stores) s.imageUrl = productImage
+
   const best = stores[0]
 
   return {
@@ -131,7 +145,7 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
     bestPrice: best.price,
     bestUnitPrice: best.price,
     bestStore: best.storeName,
-    bestImageUrl: best.imageUrl,
+    bestImageUrl: productImage,
   }
 }
 
