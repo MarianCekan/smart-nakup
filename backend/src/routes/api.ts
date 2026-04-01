@@ -103,44 +103,13 @@ router.get('/products/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim()
   if (q.length < 2) return res.json([])
   try {
-    // PRICEO ZAKOMENTOVANÉ — testujeme len kompas+cenysk
-    // const [priceoResults, cenyskResults] = await Promise.all([
-    //   searchPriceo(q, 12).catch(() => []),
-    //   searchProducts(q, 12).catch(() => []),
-    // ])
-    const priceoResults: any[] = []
-    const cenyskResults = await searchProducts(q, 12).catch(() => [])
+    // LEN KOMPAS — priceo aj cenysk zakomentované
+    const kompasResults = getKompasQueryCache(q) ?? await searchKompas(q, 20).catch(() => [])
+    if (!kompasResults.length) searchKompas(q, 20).catch(() => {})
 
-    // Kompas: ak je v cache → použij hneď; inak spusti na pozadí (rýchla odozva)
-    const kompasResults = getKompasQueryCache(q) ?? []
-    if (!kompasResults.length) searchKompas(q, 6).catch(() => {})
-
-    // cenyslovensko → filtruj len Terno/Billa/Fresh
-    const cenyskFiltered = cenyskResults
-      .map(g => ({ ...g, stores: g.stores.filter(s => CENYSK_ONLY_IDS.has(s.companyId)) }))
-      .filter(g => g.stores.length > 0)
-      .map(g => {
-        const best = g.stores[0]
-        return { ...g, bestPrice: best.price, bestUnitPrice: best.unitPrice, bestStore: best.storeName, bestImageUrl: best.imageUrl }
-      })
-
-    // Merge kompas promo ceny do cenysk výsledkov (nižšia cena vyhráva)
-    const priceoMerged = priceoResults.map(g => mergeKompasIntoGroup(g, kompasResults))
-    const cenyskMerged = cenyskFiltered.map(g => mergeKompasIntoGroup(g, kompasResults))
-
-    // Kompas produkty ktoré nie sú v cenysk → zobraz samostatne
-    const allMergedNames = new Set([...priceoMerged, ...cenyskMerged].map(g => g.nameLower))
-    const kWords = (k: any) => k.nameLower.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
-    const kompasOnly = kompasResults.filter(k => {
-      if (kWords(k).length === 1) return true
-      return ![...allMergedNames].some(n => n === k.nameLower || n.includes(k.nameLower) || k.nameLower.includes(n))
-    })
-
-    const merged = [
-      ...priceoMerged.map(g => toHit(g, 'priceo')),
-      ...cenyskMerged.map(g => toHit(g, 'cenysk')),
-      ...kompasOnly.map(g => toHit(g, 'kompas')),
-    ].slice(0, 20)
+    const merged = kompasResults
+      .map(g => toHit(g, 'kompas'))
+      .slice(0, 20)
 
     res.json(merged)
   } catch (e: any) { res.status(502).json({ error: e.message }) }
@@ -162,121 +131,12 @@ router.post('/optimize', async (req, res) => {
   console.log(`📦 optimize items: ${items.map(i => `${i.query}[${i.groupKey ?? 'no-key'}]`).join(', ')}`)
 
   try {
-    // Rozdeľ items na priceo vs cenysk vs kompas podľa groupKey
-    const priceoItems: typeof items = []
-    const cenyskItems: typeof items = []
-    const kompasItems: typeof items = []
-    const mixedItems: typeof items = [] // bez groupKey → hľadáme vo všetkých
-
-    for (const item of items) {
-      if (item.groupKey?.startsWith('priceo:')) {
-        // PRICEO ZAKOMENTOVANÉ — presmeruj do cenysk/kompas
-        // priceoItems.push(item)
-        mixedItems.push(item)
-      } else if (item.groupKey?.startsWith('kompas:')) {
-        kompasItems.push(item)
-      } else if (item.groupKey) {
-        cenyskItems.push(item)
-      } else {
-        mixedItems.push(item)
-      }
-    }
-
-    // Vyreš mixed items: len cenysk (priceo zakomentované)
-    for (const item of mixedItems) {
-      // const wantPriceo = allowedPriceo.length > 0 || company_ids.length === 0
-      const wantCenysk = allowedCenysk.length > 0 || company_ids.length === 0
-      // if (wantPriceo) priceoItems.push(item)
-      if (wantCenysk) cenyskItems.push(item)
-    }
-
-    // Resolve priceo items — načítaj ProductGroup z cache alebo re-search
-    type ResolvedItem = { query: string; groupKey?: string; group: any; source: 'priceo' | 'cenysk' }
-    const resolvedPriceo: ResolvedItem[] = []
-    const priceoUnresolvedUnmatched: string[] = []
-    for (const item of priceoItems) {
-      let group = item.groupKey ? getPriceoFromCache(item.groupKey) : undefined
-      if (!group) {
-        const results = await searchPriceo(item.query, 5)
-        group = item.groupKey ? results.find(g => g.groupKey === item.groupKey) : results[0]
-      }
-      if (group) {
-        resolvedPriceo.push({ query: item.query, groupKey: item.groupKey, group, source: 'priceo' })
-      } else {
-        priceoUnresolvedUnmatched.push(item.query)
-      }
-    }
-
-    // Vyreš cenysk items cez existujúci optimizeCart ale len s CENYSK_ONLY obchodmi
-    const effectiveCenyskIds = company_ids.length === 0
-      ? [...CENYSK_ONLY_IDS]
-      : allowedCenysk
-
-    const cenyskResult = cenyskItems.length > 0
-      ? await optimizeCart(cenyskItems, effectiveCenyskIds)
-      : { stores: [], total_optimized: 0, total_worst: 0, total_saving: 0, unmatched: [], needsApproval: [] }
-
-    // Teraz optimalizuj priceo items manuálne
-    const priceoStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
-    const priceoUnmatched: string[] = []
-    const priceoNeedsApproval: any[] = []
-
-    for (const { query, groupKey, group: rawGroup } of resolvedPriceo) {
-      // Kompas lookup: skús prvé slovo názvu produktu (najpravdepodobnejšie čo user hľadal)
-      // Napr. "Mlieko polotučné 1,5% 1l" → "mlieko" → cache hit z predchádzajúceho searchu
-      // Priorita: 1) cache pre simplifyQuery (napr. "mrkva balena"), 2) cache pre 1. slovo (napr. "mrkva" z predch. searchu), 3) fresh search
-      const kompasQ1 = simplifyQuery(rawGroup.nameLower)
-      const kompasQ2 = rawGroup.nameLower.split(/[\s,]+/)[0].toLowerCase()
-      const kompasForItem = getKompasQueryCache(kompasQ1) ?? getKompasQueryCache(kompasQ2) ?? await searchKompas(kompasQ1, 3).catch(() => [])
-      const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
-
-      const eligible = (company_ids.length === 0
-        ? group.stores  // žiadny filter → všetky obchody
-        : allowedPriceo.length > 0
-          ? group.stores.filter((s: any) => allowedPriceo.includes(s.companyId))
-          : [])  // user vybral len cenysk obchody → priceo položka tam nie je
-
-      if (!eligible.length) {
-        // Hľadaj alternatívu
-        if (company_ids.length > 0) {
-          const findAlt = (results: any[]) =>
-            results.find((a: any) => a.groupKey !== group.groupKey && a.stores.some((s: any) => allowedPriceo.includes(s.companyId)))
-
-          // 1. skús plný názov, 2. fallback na zjednodušený (napr. "vajcia" namiesto "vajcia z podstielkového chovu M a L 10ks")
-          let alts = await searchPriceo(group.name, 10)
-          let alt = findAlt(alts)
-          if (!alt) {
-            const simple = simplifyQuery(group.name)
-            if (simple && simple !== group.nameLower) {
-              alts = await searchPriceo(simple, 10)
-              alt = findAlt(alts)
-            }
-          }
-          if (alt) {
-            const bestAlt = alt.stores.find((s: any) => allowedPriceo.includes(s.companyId))!
-            priceoNeedsApproval.push({ originalQuery: query, originalGroupKey: groupKey, suggested: { groupKey: alt.groupKey, name: alt.name, unit: alt.unit, packageSize: alt.packageSize, imageUrl: bestAlt.imageUrl ?? alt.bestImageUrl, price: bestAlt.price, unitPrice: bestAlt.unitPrice, storeName: bestAlt.storeName, isPromo: bestAlt.isPromo } })
-            continue
-          }
-        }
-        priceoUnmatched.push(query)
-        continue
-      }
-
-      const chosen = eligible[0]
-      if (!priceoStoreMap.has(chosen.companyId)) {
-        priceoStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
-      }
-      const grp = priceoStoreMap.get(chosen.companyId)!
-      grp.items.push({ query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: chosen.isPromo, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores })
-      grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
-    }
-
-    // Resolve + optimalizuj kompas items
+    // LEN KOMPAS — všetky items cez kompas
+    const allowedAll = [...allowedPriceo, ...allowedCenysk]
     const kompasStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
     const kompasUnmatched: string[] = []
-    const allowedAll = [...allowedPriceo, ...allowedCenysk]
 
-    for (const item of kompasItems) {
+    for (const item of items) {
       let group = item.groupKey ? getKompasFromCache(item.groupKey) : undefined
       if (!group) {
         const results = await searchKompas(item.query, 5)
@@ -291,7 +151,7 @@ router.post('/optimize', async (req, res) => {
       if (!eligible.length) { kompasUnmatched.push(item.query); continue }
 
       const chosen = eligible[0]
-      console.log(`🛒 kompas optimize "${group.name}": eligible=[${eligible.map((s: any) => `${s.storeName}:${s.price}`).join(',')}] → chosen ${chosen.storeName}:${chosen.price}`)
+      console.log(`🛒 kompas optimize "${group.name}": chosen ${chosen.storeName}:${chosen.price}`)
       if (!kompasStoreMap.has(chosen.companyId)) {
         kompasStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
       }
@@ -300,34 +160,17 @@ router.post('/optimize', async (req, res) => {
       grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
     }
 
-    // Zlúč priceo + cenysk + kompas stores (merge podľa companyId)
-    const storeMapFinal = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
-    for (const s of [...Array.from(priceoStoreMap.values()), ...cenyskResult.stores, ...Array.from(kompasStoreMap.values())]) {
-      if (!storeMapFinal.has(s.companyId)) {
-        storeMapFinal.set(s.companyId, { storeName: s.storeName, companyId: s.companyId, items: [], subtotal: 0 })
-      }
-      const entry = storeMapFinal.get(s.companyId)!
-      entry.items.push(...s.items)
-      entry.subtotal = parseFloat((entry.subtotal + s.subtotal).toFixed(2))
-    }
-    const allStores = Array.from(storeMapFinal.values()).sort((a, b) => b.subtotal - a.subtotal)
-
+    const allStores = Array.from(kompasStoreMap.values()).sort((a, b) => b.subtotal - a.subtotal)
     const total_optimized = parseFloat(allStores.reduce((s, g) => s + g.subtotal, 0).toFixed(2))
-    const total_worst = parseFloat((
-      [...resolvedPriceo.map(({ group }) => {
-        const eligible = allowedPriceo.length > 0 ? group.stores.filter((s: any) => allowedPriceo.includes(s.companyId)) : group.stores
-        return eligible.length ? eligible[eligible.length - 1].price : 0
-      }),
-      ].reduce((a, b) => a + b, 0) + cenyskResult.total_worst
-    ).toFixed(2))
+    const total_worst = total_optimized // kompas má len jednu cenu → žiadna úspora
 
     res.json({
       stores: allStores,
       total_optimized,
       total_worst,
-      total_saving: parseFloat((total_worst - total_optimized).toFixed(2)),
-      unmatched: [...priceoUnresolvedUnmatched, ...priceoUnmatched, ...cenyskResult.unmatched, ...kompasUnmatched],
-      needsApproval: [...priceoNeedsApproval, ...cenyskResult.needsApproval],
+      total_saving: 0,
+      unmatched: kompasUnmatched,
+      needsApproval: [],
     })
   } catch (e: any) { res.status(502).json({ error: e.message }) }
 })
