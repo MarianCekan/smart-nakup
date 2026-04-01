@@ -160,6 +160,8 @@ router.post('/optimize', async (req, res) => {
   const allowedPriceo = company_ids.filter(id => PRICEO_COMPANY_IDS.has(id))
   const allowedCenysk = company_ids.filter(id => CENYSK_ONLY_IDS.has(id))
 
+  console.log(`📦 optimize items: ${items.map(i => `${i.query}[${i.groupKey ?? 'no-key'}]`).join(', ')}`)
+
   try {
     // Rozdeľ items na priceo vs cenysk vs kompas podľa groupKey
     const priceoItems: typeof items = []
