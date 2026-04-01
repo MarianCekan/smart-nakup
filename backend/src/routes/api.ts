@@ -281,12 +281,14 @@ router.post('/optimize', async (req, res) => {
       }
       if (!group) { kompasUnmatched.push(item.query); continue }
 
-      const eligible = allowedAll.length > 0
+      const eligible = (allowedAll.length > 0
         ? group.stores.filter((s: any) => allowedAll.includes(s.companyId))
         : group.stores
+      ).sort((a: any, b: any) => a.price - b.price)
       if (!eligible.length) { kompasUnmatched.push(item.query); continue }
 
       const chosen = eligible[0]
+      console.log(`🛒 kompas optimize "${group.name}": eligible=[${eligible.map((s: any) => `${s.storeName}:${s.price}`).join(',')}] → chosen ${chosen.storeName}:${chosen.price}`)
       if (!kompasStoreMap.has(chosen.companyId)) {
         kompasStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
       }
