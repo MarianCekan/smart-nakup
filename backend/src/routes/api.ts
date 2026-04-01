@@ -70,8 +70,16 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
     const aWords = a.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
     const bWords = b.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
     if (!aWords.length || !bWords.length) return false
-    // Ak kompas má 1 slovo, matchuj len ak je to prvé slovo aj priceo produktu
-    if (aWords.length === 1) return bWords[0] === aWords[0]
+    // Ak kompas má 1 slovo (napr. "Mrkva"), matchuj len ak prvé slovo priceo produktu súhlasí
+    // A druhé slovo (ak existuje) NIE JE variant-descriptor (tučné/polotučné/plnotučné...)
+    const VARIANT_WORDS = new Set(['polotucne','plnotucne','tucne','odtucnene','cerstve','sterilizovane','sladke','kysle'])
+    const da = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (aWords.length === 1) {
+      if (da(bWords[0]) !== da(aWords[0])) return false
+      // Ak priceo má 2. slovo a je to variant-descriptor → "Mlieko polotučné" ≠ generická "Mlieko"
+      if (bWords.length >= 2 && VARIANT_WORDS.has(da(bWords[1]))) return false
+      return true
+    }
     const shorter = aWords.length <= bWords.length ? aWords : bWords
     const longer  = aWords.length <= bWords.length ? bWords : aWords
     return shorter.every((w: string) => longer.some((lw: string) => lw.includes(w) || w.includes(lw)))
@@ -81,10 +89,12 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
   const stores = [...group.stores]
   for (const ks of kMatch.stores) {
     const idx = stores.findIndex((s: any) => s.companyId === ks.companyId)
-    // Len updatni cenu ak obchod už existuje v priceo — nepridávaj nové obchody
-    // (kompas "mlieko" kategória má ceny za rôzne druhy mlieka, nie konkrétny produkt)
-    if (idx >= 0 && ks.price < stores[idx].price) {
-      stores[idx] = { ...ks, isPromo: true }
+    if (idx >= 0) {
+      // Aktualizuj cenu ak je kompas lacnejší
+      if (ks.price < stores[idx].price) stores[idx] = { ...stores[idx], price: ks.price, unitPrice: ks.price, isPromo: true }
+    } else {
+      // Pridaj obchod z kompas ktorý nie je v priceo/cenysk
+      stores.push({ ...ks, isPromo: true })
     }
   }
   stores.sort((a: any, b: any) => a.price - b.price)
