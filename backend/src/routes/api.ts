@@ -103,18 +103,19 @@ router.get('/products/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim()
   if (q.length < 2) return res.json([])
   try {
-    // Paralelne dotaz na priceo + cenysk
-    const [priceoResults, cenyskResults] = await Promise.all([
-      searchPriceo(q, 12).catch(() => []),
-      searchProducts(q, 12).catch(() => []),
-    ])
+    // PRICEO ZAKOMENTOVANÉ — testujeme len kompas+cenysk
+    // const [priceoResults, cenyskResults] = await Promise.all([
+    //   searchPriceo(q, 12).catch(() => []),
+    //   searchProducts(q, 12).catch(() => []),
+    // ])
+    const priceoResults: any[] = []
+    const cenyskResults = await searchProducts(q, 12).catch(() => [])
 
     // Kompas: ak je v cache → použij hneď; inak spusti na pozadí (rýchla odozva)
     const kompasResults = getKompasQueryCache(q) ?? []
     if (!kompasResults.length) searchKompas(q, 6).catch(() => {})
 
-    // priceo → Tesco/Kaufland/Lidl (stále ceny)
-    // cenyslovensko → filtruj len Terno/Billa/Fresh (ostatné pokrýva priceo)
+    // cenyslovensko → filtruj len Terno/Billa/Fresh
     const cenyskFiltered = cenyskResults
       .map(g => ({ ...g, stores: g.stores.filter(s => CENYSK_ONLY_IDS.has(s.companyId)) }))
       .filter(g => g.stores.length > 0)
@@ -123,17 +124,15 @@ router.get('/products/search', async (req, res) => {
         return { ...g, bestPrice: best.price, bestUnitPrice: best.unitPrice, bestStore: best.storeName, bestImageUrl: best.imageUrl }
       })
 
-    // Merge kompas promo ceny do priceo/cenysk výsledkov (nižšia cena vyhráva)
+    // Merge kompas promo ceny do cenysk výsledkov (nižšia cena vyhráva)
     const priceoMerged = priceoResults.map(g => mergeKompasIntoGroup(g, kompasResults))
     const cenyskMerged = cenyskFiltered.map(g => mergeKompasIntoGroup(g, kompasResults))
 
-    // Kompas produkty ktoré nie sú v priceo/cenysk → zobraz samostatne
+    // Kompas produkty ktoré nie sú v cenysk → zobraz samostatne
     const allMergedNames = new Set([...priceoMerged, ...cenyskMerged].map(g => g.nameLower))
     const kWords = (k: any) => k.nameLower.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
     const kompasOnly = kompasResults.filter(k => {
-      // 1-slovné kompas (napr. "Mrkva"): zobraz vždy ako standalone — nemerge sa s priceo
       if (kWords(k).length === 1) return true
-      // Multi-slovné: vylúč ak sa exaktne zhoduje alebo je podmnožinou priceo názvu
       return ![...allMergedNames].some(n => n === k.nameLower || n.includes(k.nameLower) || k.nameLower.includes(n))
     })
 
@@ -171,7 +170,9 @@ router.post('/optimize', async (req, res) => {
 
     for (const item of items) {
       if (item.groupKey?.startsWith('priceo:')) {
-        priceoItems.push(item)
+        // PRICEO ZAKOMENTOVANÉ — presmeruj do cenysk/kompas
+        // priceoItems.push(item)
+        mixedItems.push(item)
       } else if (item.groupKey?.startsWith('kompas:')) {
         kompasItems.push(item)
       } else if (item.groupKey) {
@@ -181,11 +182,11 @@ router.post('/optimize', async (req, res) => {
       }
     }
 
-    // Vyreš mixed items: hľadáme v priceo aj cenysk, vyberieme podľa toho aké obchody sú allowed
+    // Vyreš mixed items: len cenysk (priceo zakomentované)
     for (const item of mixedItems) {
-      const wantPriceo = allowedPriceo.length > 0 || company_ids.length === 0
+      // const wantPriceo = allowedPriceo.length > 0 || company_ids.length === 0
       const wantCenysk = allowedCenysk.length > 0 || company_ids.length === 0
-      if (wantPriceo) priceoItems.push(item)
+      // if (wantPriceo) priceoItems.push(item)
       if (wantCenysk) cenyskItems.push(item)
     }
 
