@@ -174,7 +174,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           style={{ padding: '13px 22px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 12, fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>+</button>
       </div>
 
-      {open && suggestions.length > 0 && (
+      {(open && suggestions.length > 0) || (loading && debouncedQ.length >= 2) ? (
         <ul
           onMouseDown={e => e.preventDefault()}
           onTouchMove={() => { inputRef.current?.blur() /* hide keyboard, keep dropdown open */ }}
@@ -185,6 +185,15 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
           maxHeight: '220px', overflowY: 'auto',
         }}>
+          {loading && suggestions.length === 0 && [0,1,2].map(i => (
+            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', flexShrink: 0, animation: 'shimmer 1.2s infinite' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ height: 13, borderRadius: 6, background: '#f1f5f9', marginBottom: 6, width: `${65 + i * 10}%`, animation: 'shimmer 1.2s infinite' }} />
+                <div style={{ height: 11, borderRadius: 6, background: '#f1f5f9', width: '40%', animation: 'shimmer 1.2s infinite' }} />
+              </div>
+            </li>
+          ))}
           {loadingPromo && (
             <li style={{ padding: '6px 10px', fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.2s infinite' }} />
@@ -230,7 +239,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
             )
           })}
         </ul>
-      )}
+      ) : null}
     </div>
   )
 }
