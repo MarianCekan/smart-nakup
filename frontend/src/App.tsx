@@ -81,6 +81,20 @@ function saveLists(lists: SavedList[]) {
   localStorage.setItem('smartnakup_lists', JSON.stringify(lists))
 }
 
+const LOADING_PHRASES = [
+  '🕵️ Prehľadávam letáky…',
+  '🥕 Hľadám najlepšiu mrkvu…',
+  '💸 Porovnávam ceny…',
+  '🛒 Prechádzam regály…',
+  '🔍 Lustrujem obchody…',
+  '📦 Otváram škatule…',
+  '🧾 Čítam letáky po jednom…',
+  '🤑 Hľadám kde ušetríš…',
+  '🐌 Kompas je trochu pomalý, sorry…',
+  '☕ Mohol by si si uvariť kávu…',
+  '🎯 Takmer tam…',
+]
+
 // ─── TypeaheadInput ───────────────────────────────────────────────────────────
 function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [value, setValue] = useState('')
@@ -90,6 +104,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [loading, setLoading] = useState(false)
   const [loadingPromo, setLoadingPromo] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [phraseIdx, setPhraseIdx] = useState(0)
   const debouncedQ = useDebounce(value, 280)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -109,20 +124,29 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
     }
   }, [])
 
+  // Cyklovanie vtipných fráz počas loading-u
+  useEffect(() => {
+    if (!loading) return
+    setPhraseIdx(0)
+    const t = setInterval(() => setPhraseIdx(i => (i + 1) % LOADING_PHRASES.length), 1800)
+    return () => clearInterval(t)
+  }, [loading])
+
   useEffect(() => {
     if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); return }
     let cancelled = false
     setLoading(true)
     setLoadingPromo(false)
+    const sortByPrice = (hits: ProductHit[]) => [...hits].sort((a, b) => a.bestPrice - b.bestPrice)
     api.search(debouncedQ)
-      .then(hits => { if (!cancelled) { setSuggestions(hits); setOpen(hits.length > 0); setActiveIdx(-1); setLoadingPromo(true) } })
+      .then(hits => { if (!cancelled) { setSuggestions(sortByPrice(hits)); setOpen(hits.length > 0); setActiveIdx(-1); setLoadingPromo(true) } })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
     // Kompas beží na pozadí ~4s — po 5s re-fetchni aby sa zobrazili akciové ceny
     const refresh = setTimeout(() => {
       if (cancelled) return
       api.search(debouncedQ)
-        .then(hits => { if (!cancelled) { setSuggestions(hits); setLoadingPromo(false) } })
+        .then(hits => { if (!cancelled) { setSuggestions(sortByPrice(hits)); setLoadingPromo(false) } })
         .catch(() => { if (!cancelled) setLoadingPromo(false) })
     }, 5000)
     return () => { cancelled = true; clearTimeout(refresh) }
@@ -185,15 +209,22 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
           maxHeight: '220px', overflowY: 'auto',
         }}>
-          {loading && suggestions.length === 0 && [0,1,2].map(i => (
-            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', flexShrink: 0, animation: 'shimmer 1.2s infinite' }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ height: 13, borderRadius: 6, background: '#f1f5f9', marginBottom: 6, width: `${65 + i * 10}%`, animation: 'shimmer 1.2s infinite' }} />
-                <div style={{ height: 11, borderRadius: 6, background: '#f1f5f9', width: '40%', animation: 'shimmer 1.2s infinite' }} />
-              </div>
-            </li>
-          ))}
+          {loading && suggestions.length === 0 && (
+            <>
+              <li style={{ padding: '12px 14px', fontSize: 14, color: '#475569', fontWeight: 500, textAlign: 'center', animation: 'shimmer 1.8s infinite' }}>
+                {LOADING_PHRASES[phraseIdx]}
+              </li>
+              {[0,1,2].map(i => (
+                <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', flexShrink: 0, animation: 'shimmer 1.2s infinite' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 13, borderRadius: 6, background: '#f1f5f9', marginBottom: 6, width: `${65 + i * 10}%`, animation: 'shimmer 1.2s infinite' }} />
+                    <div style={{ height: 11, borderRadius: 6, background: '#f1f5f9', width: '40%', animation: 'shimmer 1.2s infinite' }} />
+                  </div>
+                </li>
+              ))}
+            </>
+          )}
           {loadingPromo && (
             <li style={{ padding: '6px 10px', fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.2s infinite' }} />
