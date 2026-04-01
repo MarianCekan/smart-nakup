@@ -101,14 +101,20 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
     const price = parseFloat(offer.price)
     if (!price || isNaN(price)) continue
 
-    stores.push({
-      companyId: matched.companyId,
-      storeName: matched.storeName,
-      price,
-      unitPrice: price,  // kompas nemá jednotkové ceny
-      isPromo: true,     // vždy akciová cena
-      imageUrl: product.image ?? null,
-    })
+    // Dedup: ak rovnaký obchod (companyId) už existuje, nechaj nižšiu cenu
+    const existing = stores.find(s => s.companyId === matched.companyId)
+    if (existing) {
+      if (price < existing.price) existing.price = price
+    } else {
+      stores.push({
+        companyId: matched.companyId,
+        storeName: matched.storeName,
+        price,
+        unitPrice: price,
+        isPromo: true,
+        imageUrl: product.image ?? null,
+      })
+    }
   }
 
   if (!stores.length) return null
