@@ -88,6 +88,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [open, setOpen] = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
   const [loading, setLoading] = useState(false)
+  const [loadingPromo, setLoadingPromo] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const debouncedQ = useDebounce(value, 280)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -112,16 +113,17 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
     if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); return }
     let cancelled = false
     setLoading(true)
+    setLoadingPromo(false)
     api.search(debouncedQ)
-      .then(hits => { if (!cancelled) { setSuggestions(hits); setOpen(hits.length > 0); setActiveIdx(-1) } })
+      .then(hits => { if (!cancelled) { setSuggestions(hits); setOpen(hits.length > 0); setActiveIdx(-1); setLoadingPromo(true) } })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
     // Kompas beží na pozadí ~4s — po 5s re-fetchni aby sa zobrazili akciové ceny
     const refresh = setTimeout(() => {
       if (cancelled) return
       api.search(debouncedQ)
-        .then(hits => { if (!cancelled) setSuggestions(hits) })
-        .catch(() => {})
+        .then(hits => { if (!cancelled) { setSuggestions(hits); setLoadingPromo(false) } })
+        .catch(() => { if (!cancelled) setLoadingPromo(false) })
     }, 5000)
     return () => { cancelled = true; clearTimeout(refresh) }
   }, [debouncedQ])
@@ -183,6 +185,12 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
           maxHeight: '220px', overflowY: 'auto',
         }}>
+          {loadingPromo && (
+            <li style={{ padding: '6px 10px', fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.2s infinite' }} />
+              Načítavam akciové ceny…
+            </li>
+          )}
           {suggestions.map((hit, i) => {
             const c = col(hit.bestStore)
             const unitLabel = hit.unit === 'g' ? 'kg' : hit.unit === 'ml' ? 'l' : hit.unit
