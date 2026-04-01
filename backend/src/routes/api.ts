@@ -72,14 +72,9 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
     if (!aWords.length || !bWords.length) return false
     // Ak kompas má 1 slovo (napr. "Mrkva"), matchuj len ak prvé slovo priceo produktu súhlasí
     // A druhé slovo (ak existuje) NIE JE variant-descriptor (tučné/polotučné/plnotučné...)
-    const VARIANT_WORDS = new Set(['polotucne','plnotucne','tucne','odtucnene','cerstve','sterilizovane','sladke','kysle'])
-    const da = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    if (aWords.length === 1) {
-      if (da(bWords[0]) !== da(aWords[0])) return false
-      // Ak priceo má 2. slovo a je to variant-descriptor → "Mlieko polotučné" ≠ generická "Mlieko"
-      if (bWords.length >= 2 && VARIANT_WORDS.has(da(bWords[1]))) return false
-      return true
-    }
+    // 1-slovné kompas názvy (napr. "Mrkva", "Mlieko") sú príliš generické na merge —
+    // jeden slug pokrýva desiatky variant produktov → mergovanie by kazilo ceny všetkých
+    if (aWords.length === 1) return false
     const shorter = aWords.length <= bWords.length ? aWords : bWords
     const longer  = aWords.length <= bWords.length ? bWords : aWords
     return shorter.every((w: string) => longer.some((lw: string) => lw.includes(w) || w.includes(lw)))
@@ -134,7 +129,11 @@ router.get('/products/search', async (req, res) => {
 
     // Kompas produkty ktoré nie sú v priceo/cenysk → zobraz samostatne
     const allMergedNames = new Set([...priceoMerged, ...cenyskMerged].map(g => g.nameLower))
+    const kWords = (k: any) => k.nameLower.split(/[\s,+%/]+/).filter((w: string) => w.length > 3 && !/^\d/.test(w))
     const kompasOnly = kompasResults.filter(k => {
+      // 1-slovné kompas (napr. "Mrkva"): zobraz vždy ako standalone — nemerge sa s priceo
+      if (kWords(k).length === 1) return true
+      // Multi-slovné: vylúč ak sa exaktne zhoduje alebo je podmnožinou priceo názvu
       return ![...allMergedNames].some(n => n === k.nameLower || n.includes(k.nameLower) || k.nameLower.includes(n))
     })
 
