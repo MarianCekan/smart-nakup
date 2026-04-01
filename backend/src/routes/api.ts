@@ -86,6 +86,8 @@ function mergeKompasIntoGroup(group: any, kompasResults: any[]): any {
   })
   if (!kMatch) return group
 
+  console.log(`🔀 kompas merge: "${kMatch.name}" → priceo "${group.name}" | kompas stores: ${kMatch.stores.map((s: any) => `${s.storeName}:${s.price}`).join(', ')}`)
+
   const stores = [...group.stores]
   for (const ks of kMatch.stores) {
     const idx = stores.findIndex((s: any) => s.companyId === ks.companyId)
@@ -220,8 +222,10 @@ router.post('/optimize', async (req, res) => {
     for (const { query, groupKey, group: rawGroup } of resolvedPriceo) {
       // Kompas lookup: skús prvé slovo názvu produktu (najpravdepodobnejšie čo user hľadal)
       // Napr. "Mlieko polotučné 1,5% 1l" → "mlieko" → cache hit z predchádzajúceho searchu
-      const kompasQuery = simplifyQuery(rawGroup.nameLower)
-      const kompasForItem = await searchKompas(kompasQuery, 3).catch(() => [])
+      // Priorita: 1) cache pre simplifyQuery (napr. "mrkva balena"), 2) cache pre 1. slovo (napr. "mrkva" z predch. searchu), 3) fresh search
+      const kompasQ1 = simplifyQuery(rawGroup.nameLower)
+      const kompasQ2 = rawGroup.nameLower.split(/[\s,]+/)[0].toLowerCase()
+      const kompasForItem = getKompasQueryCache(kompasQ1) ?? getKompasQueryCache(kompasQ2) ?? await searchKompas(kompasQ1, 3).catch(() => [])
       const group = mergeKompasIntoGroup(rawGroup, kompasForItem)
 
       const eligible = (company_ids.length === 0
