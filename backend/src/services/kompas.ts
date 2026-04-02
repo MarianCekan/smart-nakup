@@ -156,15 +156,35 @@ const _cache = new Map<string, ProductGroup>()
 const _queryCache = new Map<string, { results: ProductGroup[]; ts: number }>()
 const QUERY_TTL = 2 * 60 * 60 * 1000  // 2 hodiny — letákové ceny sa menia raz za týždeň
 
+// Query → slug: "múka hladká" → "muka-hladka"
+function queryToSlug(query: string): string {
+  return deaccent(query.trim()).replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+}
+
 async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> {
-  const searchUrl = `${BASE}/hladaj?f=${encodeURIComponent(query)}`
-  const html = await fetchHtml(searchUrl)
-  if (!html) return []
+  const baseSlug = queryToSlug(query)
 
-  const slugs = extractSlugs(html).slice(0, limit * 2)
-  if (!slugs.length) return []
+  // Rovno na /produkty/{slug} — preskočíme /hladaj (je to len navigácia, nie výsledky)
+  // Skúsime aj /hladaj ako fallback pre extra slugy (napr. "muka-hladka", "muka-polohruba"...)
+  const primaryHtml = await fetchHtml(`${BASE}/produkty/${baseSlug}`)
+  const searchHtml = await fetchHtml(`${BASE}/hladaj?f=${encodeURIComponent(query)}`)
 
-  const groups = await Promise.all(slugs.map(s => fetchProductGroup(s)))
+  // Zo search stránky vyber ďalšie kategórie slugy (napr. muka-hladka, muka-polohruba)
+  const extraSlugs = searchHtml
+    ? extractSlugs(searchHtml).filter(s => s !== baseSlug).slice(0, 4)
+    : []
+
+  // Fetch všetky kategórie paralelne
+  const allHtmls: Array<{ slug: string; html: string }> = []
+  if (primaryHtml) allHtmls.push({ slug: baseSlug, html: primaryHtml })
+  const extraHtmls = await Promise.all(extraSlugs.map(async s => {
+    const h = await fetchHtml(`${BASE}/produkty/${s}`)
+    return h ? { slug: s, html: h } : null
+  }))
+  for (const e of extraHtmls) if (e) allHtmls.push(e)
+
+  // Každú kategóriu sparsuj cez fetchProductGroup (JSON-LD)
+  const groups = await Promise.all(allHtmls.map(({ slug }) => fetchProductGroup(slug)))
   const valid = groups.filter((g): g is ProductGroup => g !== null)
 
   const q = deaccent(query.trim())
