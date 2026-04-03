@@ -1076,10 +1076,7 @@ export default function App() {
           {!sessionLoading && (
             session
               ? <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#475569' }}>☰</button>
-              : <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setScreen('recipes')} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>🍳 Recepty</button>
-                  <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
-                </div>
+              : <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
           )}
         </div>
 
