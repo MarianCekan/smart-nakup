@@ -1060,7 +1060,7 @@ export default function App() {
                 )
               })}
               <div style={{ flex: 1 }} />
-              <button onClick={() => { authClient.signOut(); setMenuOpen(false) }} style={{
+              <button onClick={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} style={{
                 background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px',
                 cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', width: '100%',
               }}>Odhlásiť sa</button>
