@@ -788,68 +788,83 @@ function RecipesScreen({ onBack, onAddToCart }: {
   onBack: () => void
   onAddToCart: (items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[]) => void
 }) {
-  const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null>>({})
-  const [loading, setLoading] = useState(true)
+  const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
+  const checkAvailability = () => {
+    setLoading(true)
     const all = [...new Set(RECIPES.flatMap(r => r.ingredients))]
     api.checkIngredients(all)
       .then(r => setHits(r))
-      .catch(() => {})
+      .catch(() => setHits({}))
       .finally(() => setLoading(false))
-  }, [])
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>← Späť</button>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>🍳 Recepty z akcií</h1>
         </div>
-        <p style={{ margin: '-12px 0 20px', color: '#64748b', fontSize: 13 }}>Suroviny v akcii sú označené ✅ — ostatné si dokúpiš za bežnú cenu.</p>
 
-        {loading && (
-          <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8', fontSize: 15 }}>
-            🔍 Kontrolujem aktuálne akcie…
+        {!hits && (
+          <div style={{ background: '#fff', borderRadius: 18, padding: 24, marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.07)', textAlign: 'center' }}>
+            <div style={{ fontSize: 15, color: '#475569', marginBottom: 16 }}>
+              Zistíme ktoré suroviny sú práve v akcii na kompaszliav.sk a vypočítame orientačnú cenu nákupu.
+            </div>
+            <button onClick={checkAvailability} disabled={loading} style={{
+              padding: '12px 24px', fontSize: 15, fontWeight: 700,
+              background: '#2563eb', color: '#fff', border: 'none',
+              borderRadius: 12, cursor: 'pointer',
+            }}>
+              {loading ? '🔍 Kontrolujem akcie…' : '🔍 Zistiť dostupnosť a orientačnú cenu'}
+            </button>
           </div>
         )}
 
-        {!loading && RECIPES.map(recipe => {
-          const found = recipe.ingredients.filter(i => hits[i])
-          const missing = recipe.ingredients.filter(i => !hits[i])
-          const price = found.reduce((s, i) => s + (hits[i]?.bestPrice ?? 0), 0)
+        {hits && RECIPES.map(recipe => {
+          const onSale = recipe.ingredients.filter(i => hits[i])
+          const missing = recipe.ingredients.filter(i => hits[i] === null || hits[i] === undefined)
+          const salePrice = onSale.reduce((s, i) => s + (hits[i]?.bestPrice ?? 0), 0)
 
           return (
             <div key={recipe.id} style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                 <span style={{ fontSize: 36 }}>{recipe.emoji}</span>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 17, color: '#0f172a' }}>{recipe.name}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>⏱ {recipe.time}{price > 0 && <span style={{ marginLeft: 10, color: '#16a34a', fontWeight: 600 }}>~{price.toFixed(2)} € (akciové suroviny)</span>}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>⏱ {recipe.time}</div>
                 </div>
+                {salePrice > 0 && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>akciové suroviny</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>~{salePrice.toFixed(2)} €</div>
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: missing.length ? 10 : 14 }}>
                 {recipe.ingredients.map(ing => {
                   const hit = hits[ing]
                   return (
                     <span key={ing} style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
                       padding: '5px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                      background: hit ? '#dcfce7' : '#f1f5f9',
-                      color: hit ? '#15803d' : '#64748b',
+                      background: hit ? '#dcfce7' : '#f8fafc',
+                      color: hit ? '#15803d' : '#94a3b8',
                       border: `1.5px solid ${hit ? '#86efac' : '#e2e8f0'}`,
                     }}>
-                      {hit ? '✅' : '➖'} {ing}
-                      {hit && <span style={{ color: '#16a34a', fontWeight: 700 }}>{hit.bestPrice.toFixed(2)} €</span>}
+                      {hit ? '🏷️' : '➖'} {ing}
+                      {hit && <span style={{ fontWeight: 700 }}>{hit.bestPrice.toFixed(2)} €</span>}
                     </span>
                   )
                 })}
               </div>
 
               {missing.length > 0 && (
-                <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
-                  Chýba {missing.length === 1 ? '1 surovina' : `${missing.length} suroviny`} v akciách: {missing.join(', ')}
+                <div style={{ fontSize: 12, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
+                  Nie v akcii ({missing.length}): <span style={{ color: '#94a3b8' }}>{missing.join(', ')}</span>
                 </div>
               )}
 
@@ -873,6 +888,16 @@ function RecipesScreen({ onBack, onAddToCart }: {
             </div>
           )
         })}
+
+        {hits && (
+          <button onClick={checkAvailability} disabled={loading} style={{
+            width: '100%', padding: '10px', fontSize: 13, fontWeight: 600,
+            background: '#fff', color: '#475569', border: '2px solid #e2e8f0',
+            borderRadius: 12, cursor: 'pointer', marginTop: 4,
+          }}>
+            {loading ? '🔍 Kontrolujem…' : '🔄 Obnoviť ceny'}
+          </button>
+        )}
       </div>
     </div>
   )
