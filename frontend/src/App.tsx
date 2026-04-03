@@ -1035,19 +1035,19 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
 
-        {/* Side menu overlay */}
-        {menuOpen && (
+        {/* Side menu — len pre prihlásených, otvára sa z pravého rohu */}
+        {menuOpen && session && (
           <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.35)' }}>
             <div onClick={e => e.stopPropagation()} style={{
-              position: 'absolute', top: 0, left: 0, bottom: 0, width: 260,
-              background: '#fff', boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+              position: 'absolute', top: 0, right: 0, bottom: 0, width: 260,
+              background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
               display: 'flex', flexDirection: 'column', padding: 24,
             }}>
-              <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a', marginBottom: 32 }}>🛒 SmartNákup</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24, paddingTop: 8 }}>{session.user.email}</div>
               {[
                 { label: '🛒 Nákup', screen: 'main' as const },
                 { label: '🍳 Recepty', screen: 'recipes' as const },
-                ...(session ? [{ label: '📋 Moje zoznamy', screen: 'saved' as const }] : []),
+                { label: '📋 Moje zoznamy', screen: 'saved' as const },
               ].map(item => (
                 <button key={item.screen} onClick={() => { setScreen(item.screen); setMenuOpen(false) }} style={{
                   background: 'none', border: 'none', textAlign: 'left', padding: '12px 0',
@@ -1056,29 +1056,31 @@ export default function App() {
                 }}>{item.label}</button>
               ))}
               <div style={{ flex: 1 }} />
-              {!sessionLoading && (
-                session
-                  ? <div>
-                      <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>{session.user.email}</div>
-                      <button onClick={() => { authClient.signOut(); setMenuOpen(false) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', width: '100%' }}>Odhlásiť sa</button>
-                    </div>
-                  : <button onClick={() => { setScreen('login'); setMenuOpen(false) }} style={{ background: '#2563eb', border: 'none', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#fff', width: '100%' }}>Prihlásiť sa</button>
-              )}
+              <button onClick={() => { authClient.signOut(); setMenuOpen(false) }} style={{
+                background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px',
+                cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', width: '100%',
+              }}>Odhlásiť sa</button>
             </div>
           </div>
         )}
 
         <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#475569' }}>☰</button>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>🛒 SmartNákup</h1>
-              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
-                Živé ceny z letákov
-                {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· cache pred {cacheInfo.ageMinutes} min</span>}
-              </p>
-            </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>🛒 SmartNákup</h1>
+            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
+              Živé ceny z letákov
+              {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· cache pred {cacheInfo.ageMinutes} min</span>}
+            </p>
           </div>
+          {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo hamburger menu (prihlásený) */}
+          {!sessionLoading && (
+            session
+              ? <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#475569' }}>☰</button>
+              : <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setScreen('recipes')} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>🍳 Recepty</button>
+                  <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
+                </div>
+          )}
         </div>
 
         {/* Krok 1 */}

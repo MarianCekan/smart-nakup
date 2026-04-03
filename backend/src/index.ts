@@ -22,7 +22,7 @@ const ALLOWED_ORIGINS = [
 ]
 
 app.use(cors({
-  origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))),
+  origin: (origin, cb) => cb(null, !origin || /^http:\/\/localhost(:\d+)?$/.test(origin) || ALLOWED_ORIGINS.some(o => origin.startsWith(o))),
   credentials: true,
 }))
 
