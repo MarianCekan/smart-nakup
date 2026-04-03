@@ -1048,13 +1048,17 @@ export default function App() {
                 { label: '🛒 Nákup', screen: 'main' as const },
                 { label: '🍳 Recepty', screen: 'recipes' as const },
                 { label: '📋 Moje zoznamy', screen: 'saved' as const },
-              ].map(item => (
-                <button key={item.screen} onClick={() => { setScreen(item.screen); setMenuOpen(false) }} style={{
-                  background: 'none', border: 'none', textAlign: 'left', padding: '12px 0',
-                  fontSize: 16, fontWeight: 600, color: '#1e293b', cursor: 'pointer',
-                  borderBottom: '1px solid #f1f5f9',
-                }}>{item.label}</button>
-              ))}
+              ].map(item => {
+                const active = screen === item.screen
+                return (
+                  <button key={item.screen} onClick={() => { setScreen(item.screen); setMenuOpen(false) }} style={{
+                    background: active ? '#eff6ff' : 'none', border: 'none', textAlign: 'left',
+                    padding: '12px 10px', margin: '2px -10px', borderRadius: 10,
+                    fontSize: 16, fontWeight: active ? 700 : 600,
+                    color: active ? '#2563eb' : '#1e293b', cursor: 'pointer', width: 'calc(100% + 20px)',
+                  }}>{item.label}{active && <span style={{ float: 'right', color: '#2563eb', fontSize: 12 }}>●</span>}</button>
+                )
+              })}
               <div style={{ flex: 1 }} />
               <button onClick={() => { authClient.signOut(); setMenuOpen(false) }} style={{
                 background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px',
