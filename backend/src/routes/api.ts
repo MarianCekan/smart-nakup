@@ -115,6 +115,19 @@ router.get('/products/search', async (req, res) => {
   } catch (e: any) { res.status(502).json({ error: e.message }) }
 })
 
+router.post('/recipes/check', async (req, res) => {
+  const { ingredients } = req.body as { ingredients: string[] }
+  if (!Array.isArray(ingredients) || ingredients.length === 0) return res.json({})
+  const results: Record<string, ReturnType<typeof toHit> | null> = {}
+  await Promise.all(ingredients.map(async q => {
+    try {
+      const hits = getKompasQueryCache(q) ?? await searchKompas(q, 3).catch(() => [])
+      results[q] = hits.length > 0 ? toHit(hits[0], 'kompas') : null
+    } catch { results[q] = null }
+  }))
+  res.json(results)
+})
+
 const OptimizeSchema = z.object({
   items: z.array(z.object({ query: z.string().min(1), groupKey: z.string().optional() })).min(1).max(50),
   company_ids: z.array(z.string()).optional().default([]),

@@ -77,4 +77,6 @@ export const api = {
   status: () => fetchJson<{ ok: boolean; rawProducts: number; groups: number; ageMinutes: number }>('/status'),
   optimize: (items: { query: string; groupKey?: string }[], company_ids: string[]) =>
     fetchJson<OptimizeResult>('/optimize', { method: 'POST', body: JSON.stringify({ items, company_ids }) }),
+  checkIngredients: (ingredients: string[]) =>
+    fetchJson<Record<string, ProductHit | null>>('/recipes/check', { method: 'POST', body: JSON.stringify({ ingredients }) }),
 }
