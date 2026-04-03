@@ -102,6 +102,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [open, setOpen] = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
   const [loading, setLoading] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [loadingPromo, setLoadingPromo] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [phraseIdx, setPhraseIdx] = useState(0)
@@ -133,22 +134,44 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   }, [loading])
 
   useEffect(() => {
-    if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); return }
+    if (debouncedQ.length < 2) { setSuggestions([]); setOpen(false); setRetrying(false); return }
     let cancelled = false
     setLoading(true)
+    setRetrying(false)
     setLoadingPromo(false)
     const sortByPrice = (hits: ProductHit[]) => [...hits].sort((a, b) => a.bestPrice - b.bestPrice)
     api.search(debouncedQ)
-      .then(hits => { if (!cancelled) { setSuggestions(sortByPrice(hits)); setOpen(hits.length > 0); setActiveIdx(-1); setLoadingPromo(true) } })
+      .then(hits => {
+        if (!cancelled) {
+          setSuggestions(sortByPrice(hits))
+          setActiveIdx(-1)
+          if (hits.length > 0) {
+            setOpen(true)
+            setLoadingPromo(true)
+            setRetrying(false)
+          } else {
+            // Prvý výsledok prázdny — kompas ešte načítava, zostaneme otvorení a skúsime znova
+            setOpen(true)
+            setRetrying(true)
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
-    // Kompas beží na pozadí ~4s — po 5s re-fetchni aby sa zobrazili akciové ceny
+    // Retry po 6s — kompas zvyčajne trvá 3-8s
     const refresh = setTimeout(() => {
       if (cancelled) return
       api.search(debouncedQ)
-        .then(hits => { if (!cancelled) { setSuggestions(sortByPrice(hits)); setLoadingPromo(false) } })
-        .catch(() => { if (!cancelled) setLoadingPromo(false) })
-    }, 5000)
+        .then(hits => {
+          if (!cancelled) {
+            setSuggestions(sortByPrice(hits))
+            setRetrying(false)
+            setLoadingPromo(false)
+            if (hits.length > 0) setOpen(true)
+          }
+        })
+        .catch(() => { if (!cancelled) setRetrying(false) })
+    }, 6000)
     return () => { cancelled = true; clearTimeout(refresh) }
   }, [debouncedQ])
 
@@ -198,7 +221,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           style={{ padding: '13px 22px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 12, fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>+</button>
       </div>
 
-      {(open && suggestions.length > 0) || (loading && debouncedQ.length >= 2) ? (
+      {(open && suggestions.length > 0) || (loading && debouncedQ.length >= 2) || (retrying && debouncedQ.length >= 2) ? (
         <ul
           onMouseDown={e => e.preventDefault()}
           onTouchMove={() => { inputRef.current?.blur() /* hide keyboard, keep dropdown open */ }}
@@ -209,10 +232,10 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
           maxHeight: '220px', overflowY: 'auto',
         }}>
-          {loading && suggestions.length === 0 && (
+          {(loading || retrying) && suggestions.length === 0 && (
             <>
               <li style={{ padding: '12px 14px', fontSize: 14, color: '#475569', fontWeight: 500, textAlign: 'center', animation: 'shimmer 1.8s infinite' }}>
-                {LOADING_PHRASES[phraseIdx]}
+                {retrying ? '⏳ Kompas sa rozmýšľa, čakám na výsledky…' : LOADING_PHRASES[phraseIdx]}
               </li>
               {[0,1,2].map(i => (
                 <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px' }}>
