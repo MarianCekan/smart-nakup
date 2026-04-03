@@ -1056,7 +1056,7 @@ export default function App() {
                     padding: '12px 10px', margin: '2px -10px', borderRadius: 10,
                     fontSize: 16, fontWeight: active ? 700 : 600,
                     color: active ? '#2563eb' : '#1e293b', cursor: 'pointer', width: 'calc(100% + 20px)',
-                  }}>{item.label}{active && <span style={{ float: 'right', color: '#2563eb', fontSize: 12 }}>●</span>}</button>
+                  }}>{item.label}</button>
                 )
               })}
               <div style={{ flex: 1 }} />
