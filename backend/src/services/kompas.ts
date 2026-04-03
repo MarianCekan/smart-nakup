@@ -164,17 +164,18 @@ function queryToSlug(query: string): string {
 async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> {
   const baseSlug = queryToSlug(query)
 
-  // Rovno na /produkty/{slug} — preskočíme /hladaj (je to len navigácia, nie výsledky)
-  // Skúsime aj /hladaj ako fallback pre extra slugy (napr. "muka-hladka", "muka-polohruba"...)
-  const primaryHtml = await fetchHtml(`${BASE}/produkty/${baseSlug}`)
-  const searchHtml = await fetchHtml(`${BASE}/hladaj?f=${encodeURIComponent(query)}`)
+  // Paralelne: /produkty/{slug} + /hladaj?f=query (pre extra slug varianty)
+  const [primaryHtml, searchHtml] = await Promise.all([
+    fetchHtml(`${BASE}/produkty/${baseSlug}`),
+    fetchHtml(`${BASE}/hladaj?f=${encodeURIComponent(query)}`),
+  ])
 
   // Zo search stránky vyber ďalšie kategórie slugy (napr. muka-hladka, muka-polohruba)
   const extraSlugs = searchHtml
-    ? extractSlugs(searchHtml).filter(s => s !== baseSlug).slice(0, 4)
+    ? extractSlugs(searchHtml).filter(s => s !== baseSlug).slice(0, 3)
     : []
 
-  // Fetch všetky kategórie paralelne
+  // Fetch extra kategórií paralelne
   const allHtmls: Array<{ slug: string; html: string }> = []
   if (primaryHtml) allHtmls.push({ slug: baseSlug, html: primaryHtml })
   const extraHtmls = await Promise.all(extraSlugs.map(async s => {
@@ -217,7 +218,7 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
 
   // Race: scrape vs timeout 1.5s
   const start = Date.now()
-  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 5000))
+  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 10000))
   const results = await Promise.race([_doSearch(query, limit), timeout])
   const elapsed = Date.now() - start
 

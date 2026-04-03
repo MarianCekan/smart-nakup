@@ -743,9 +743,170 @@ function VerifyEmailScreen({ email, onBack }: { email: string; onBack: () => voi
   )
 }
 
+// ─── Recepty ──────────────────────────────────────────────────────────────────
+type Recipe = { id: string; emoji: string; name: string; time: string; ingredients: string[] }
+
+const RECIPES: Recipe[] = [
+  {
+    id: 'bolognese',
+    emoji: '🍝',
+    name: 'Spaghetti bolognese',
+    time: '40 min',
+    ingredients: ['mleté mäso', 'cestoviny', 'paradajková omáčka', 'cibuľa', 'mrkva', 'cesnak'],
+  },
+  {
+    id: 'sosovica',
+    emoji: '🫘',
+    name: 'Šošovicový prívarok s vajcom',
+    time: '35 min',
+    ingredients: ['červená šošovica', 'klobása', 'cibuľa', 'mrkva', 'zemiaky', 'vajcia', 'kyslá smotana'],
+  },
+  {
+    id: 'segedin',
+    emoji: '🥘',
+    name: 'Segedínsky guláš',
+    time: '60 min',
+    ingredients: ['bravčové mäso', 'kyslá kapusta', 'cibuľa', 'kyslá smotana', 'paprika mletá', 'ryža'],
+  },
+  {
+    id: 'polievka',
+    emoji: '🍲',
+    name: 'Kuracia polievka s rezancami',
+    time: '50 min',
+    ingredients: ['kuracie prsia', 'mrkva', 'zeler', 'cibuľa', 'rezance', 'petržlen'],
+  },
+  {
+    id: 'rizoto',
+    emoji: '🍄',
+    name: 'Rizoto so šampiňónmi',
+    time: '30 min',
+    ingredients: ['ryža', 'šampiňóny', 'maslo', 'cibuľa', 'cesnak', 'smotana na varenie'],
+  },
+]
+
+function RecipesScreen({ onBack, onAddToCart }: {
+  onBack: () => void
+  onAddToCart: (items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[]) => void
+}) {
+  const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const checkAvailability = () => {
+    setLoading(true)
+    const all = [...new Set(RECIPES.flatMap(r => r.ingredients))]
+    api.checkIngredients(all)
+      .then(r => setHits(r))
+      .catch(() => setHits({}))
+      .finally(() => setLoading(false))
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+      <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={onBack} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>← Späť</button>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>🍳 Recepty z akcií</h1>
+        </div>
+
+        {!hits && (
+          <div style={{ background: '#fff', borderRadius: 18, padding: 24, marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.07)', textAlign: 'center' }}>
+            <div style={{ fontSize: 15, color: '#475569', marginBottom: 16 }}>
+              Zistíme ktoré suroviny sú práve v akcii na kompaszliav.sk a vypočítame orientačnú cenu nákupu.
+            </div>
+            <button onClick={checkAvailability} disabled={loading} style={{
+              padding: '12px 24px', fontSize: 15, fontWeight: 700,
+              background: '#2563eb', color: '#fff', border: 'none',
+              borderRadius: 12, cursor: 'pointer',
+            }}>
+              {loading ? '🔍 Kontrolujem akcie…' : '🔍 Zistiť dostupnosť a orientačnú cenu'}
+            </button>
+          </div>
+        )}
+
+        {hits && RECIPES.map(recipe => {
+          const onSale = recipe.ingredients.filter(i => hits[i])
+          const missing = recipe.ingredients.filter(i => hits[i] === null || hits[i] === undefined)
+          const salePrice = onSale.reduce((s, i) => s + (hits[i]?.bestPrice ?? 0), 0)
+
+          return (
+            <div key={recipe.id} style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <span style={{ fontSize: 36 }}>{recipe.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 17, color: '#0f172a' }}>{recipe.name}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>⏱ {recipe.time}</div>
+                </div>
+                {salePrice > 0 && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>akciové suroviny</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>~{salePrice.toFixed(2)} €</div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: missing.length ? 10 : 14 }}>
+                {recipe.ingredients.map(ing => {
+                  const hit = hits[ing]
+                  return (
+                    <span key={ing} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '5px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                      background: hit ? '#dcfce7' : '#f8fafc',
+                      color: hit ? '#15803d' : '#94a3b8',
+                      border: `1.5px solid ${hit ? '#86efac' : '#e2e8f0'}`,
+                    }}>
+                      {hit ? '🏷️' : '➖'} {ing}
+                      {hit && <span style={{ fontWeight: 700 }}>{hit.bestPrice.toFixed(2)} €</span>}
+                    </span>
+                  )
+                })}
+              </div>
+
+              {missing.length > 0 && (
+                <div style={{ fontSize: 12, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
+                  Nie v akcii ({missing.length}): <span style={{ color: '#94a3b8' }}>{missing.join(', ')}</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  const items = recipe.ingredients.map(ing => {
+                    const hit = hits[ing]
+                    return { query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl }
+                  })
+                  onAddToCart(items)
+                  onBack()
+                }}
+                style={{
+                  width: '100%', padding: '11px', fontSize: 14, fontWeight: 700,
+                  background: '#2563eb', color: '#fff', border: 'none',
+                  borderRadius: 12, cursor: 'pointer',
+                }}
+              >
+                🛒 Pridať suroviny do nákupného zoznamu
+              </button>
+            </div>
+          )
+        })}
+
+        {hits && (
+          <button onClick={checkAvailability} disabled={loading} style={{
+            width: '100%', padding: '10px', fontSize: 13, fontWeight: 600,
+            background: '#fff', color: '#475569', border: '2px solid #e2e8f0',
+            borderRadius: 12, cursor: 'pointer', marginTop: 4,
+          }}>
+            {loading ? '🔍 Kontrolujem…' : '🔄 Obnoviť ceny'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify'>('main')
+  const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify' | 'recipes'>('main')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [verifyEmail, setVerifyEmail] = useState('')
   const { data: session, isPending: sessionLoading } = authClient.useSession()
   const [stores, setStores] = useState<Store[]>([])
@@ -838,29 +999,62 @@ export default function App() {
   if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => setScreen('main')} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
   if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
   if (screen === 'saved') return <SavedListsScreen onBack={() => setScreen('main')} />
+  if (screen === 'recipes') return (
+    <RecipesScreen
+      onBack={() => setScreen('main')}
+      onAddToCart={items => {
+        items.forEach(item => setCartItems(prev => prev.some(i => i.query === item.query) ? prev : [...prev, item]))
+      }}
+    />
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
 
-        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>🛒 SmartNákup</h1>
-            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
-              Živé ceny z <a href="https://cenyslovensko.sk" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>cenyslovensko.sk</a>
-              {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· {cacheInfo.rawProducts} produktov · cache pred {cacheInfo.ageMinutes} min</span>}
-            </p>
+        {/* Side menu overlay */}
+        {menuOpen && (
+          <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.35)' }}>
+            <div onClick={e => e.stopPropagation()} style={{
+              position: 'absolute', top: 0, left: 0, bottom: 0, width: 260,
+              background: '#fff', boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+              display: 'flex', flexDirection: 'column', padding: 24,
+            }}>
+              <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a', marginBottom: 32 }}>🛒 SmartNákup</div>
+              {[
+                { label: '🛒 Nákup', screen: 'main' as const },
+                { label: '🍳 Recepty', screen: 'recipes' as const },
+                ...(session ? [{ label: '📋 Moje zoznamy', screen: 'saved' as const }] : []),
+              ].map(item => (
+                <button key={item.screen} onClick={() => { setScreen(item.screen); setMenuOpen(false) }} style={{
+                  background: 'none', border: 'none', textAlign: 'left', padding: '12px 0',
+                  fontSize: 16, fontWeight: 600, color: '#1e293b', cursor: 'pointer',
+                  borderBottom: '1px solid #f1f5f9',
+                }}>{item.label}</button>
+              ))}
+              <div style={{ flex: 1 }} />
+              {!sessionLoading && (
+                session
+                  ? <div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>{session.user.email}</div>
+                      <button onClick={() => { authClient.signOut(); setMenuOpen(false) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', width: '100%' }}>Odhlásiť sa</button>
+                    </div>
+                  : <button onClick={() => { setScreen('login'); setMenuOpen(false) }} style={{ background: '#2563eb', border: 'none', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#fff', width: '100%' }}>Prihlásiť sa</button>
+              )}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {!sessionLoading && (
-              session
-                ? <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>{session.user.email}</span>
-                    <button onClick={() => authClient.signOut()} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#64748b' }}>Odhlásiť</button>
-                  </div>
-                : <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
-            )}
-            {session && <button onClick={() => setScreen('saved')} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>📋 Moje zoznamy</button>}
+        )}
+
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#475569' }}>☰</button>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>🛒 SmartNákup</h1>
+              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
+                Živé ceny z letákov
+                {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· cache pred {cacheInfo.ageMinutes} min</span>}
+              </p>
+            </div>
           </div>
         </div>
 
