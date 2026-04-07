@@ -21,8 +21,8 @@ function promoDateLabel(from?: string | null, until?: string | null): { text: st
   if (!from && !until) return null
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = !!from && from > today
-  if (upcoming) return { text: `od ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
-  if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
+  if (upcoming) return { text: `Akcia platí ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
+  if (until) return { text: `Akcia platí do ${fmtDate(until)}`, upcoming: false }
   return null
 }
 
@@ -281,7 +281,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                     {hit.packageSize}{hit.unit}
                     {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
                     <span style={{ color: '#94a3b8', marginLeft: 4 }}>({hit.bestUnitPrice.toFixed(2)} €/{unitLabel})</span>
-                    {(() => { const d = promoDateLabel(hit.promoFrom, hit.promoUntil); return d ? <span style={{ marginLeft: 6, fontSize: 11, color: d.upcoming ? '#ea580c' : '#94a3b8', fontWeight: d.upcoming ? 600 : 400 }}>{d.text}</span> : null })()}
+                    {(() => { const d = promoDateLabel(hit.promoFrom, hit.promoUntil); return d ? <span style={{ marginLeft: 6, fontSize: 11, color: d.upcoming ? '#dc2626' : '#ea580c', fontWeight: 600 }}>{d.text}</span> : null })()}
                   </div>
                 </div>
                 <div style={{ flexShrink: 0, textAlign: 'right', position: 'relative' }}
@@ -342,7 +342,7 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
                   <span style={{ fontWeight: 700, color: item.isPromo ? '#dc2626' : '#1e293b', fontSize: 15 }}>{item.price.toFixed(2)} €</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.unitPrice.toFixed(2)} €/{unitLabel}</div>
-                {(() => { const d = promoDateLabel((item as any).promoFrom, (item as any).promoUntil); return d ? <div style={{ fontSize: 11, color: d.upcoming ? '#ea580c' : '#94a3b8', fontWeight: d.upcoming ? 600 : 400, marginTop: 1 }}>{d.upcoming ? '⚠ ' : ''}{d.text}</div> : null })()}
+                {(() => { const d = promoDateLabel((item as any).promoFrom, (item as any).promoUntil); return d ? <div style={{ fontSize: 11, color: d.upcoming ? '#dc2626' : '#ea580c', fontWeight: 600, marginTop: 1 }}>{d.upcoming ? '⚠ ' : ''}{d.text}</div> : null })()}
                 {/* Porovnanie s ostatnými obchodmi */}
                 {item.allStores.length > 1 && (
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
