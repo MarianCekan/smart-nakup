@@ -21,9 +21,24 @@ function promoDateLabel(from?: string | null, until?: string | null): { text: st
   if (!from && !until) return null
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = !!from && from > today
-  if (upcoming) return { text: `Akcia platí ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
-  if (until) return { text: `Akcia platí do ${fmtDate(until)}`, upcoming: false }
+  if (upcoming) return { text: `od ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
+  if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
   return null
+}
+function PromoBadge({ from, until }: { from?: string | null; until?: string | null }) {
+  const d = promoDateLabel(from, until)
+  if (!d) return null
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 600,
+      background: d.upcoming ? '#fef2f2' : '#fff7ed',
+      color: d.upcoming ? '#dc2626' : '#ea580c',
+      border: `1px solid ${d.upcoming ? '#fca5a5' : '#fed7aa'}`,
+      borderRadius: 20, padding: '2px 7px', whiteSpace: 'nowrap',
+    }}>
+      {d.upcoming ? '⚠ ' : ''}{d.text}
+    </span>
+  )
 }
 
 const STORE_LOGO_EXT: Record<string, string> = {
@@ -281,7 +296,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                     {hit.packageSize}{hit.unit}
                     {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
                     <span style={{ color: '#94a3b8', marginLeft: 4 }}>({hit.bestUnitPrice.toFixed(2)} €/{unitLabel})</span>
-                    {(() => { const d = promoDateLabel(hit.promoFrom, hit.promoUntil); return d ? <span style={{ marginLeft: 6, fontSize: 11, color: d.upcoming ? '#dc2626' : '#ea580c', fontWeight: 600 }}>{d.text}</span> : null })()}
+                    {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
                   </div>
                 </div>
                 <div style={{ flexShrink: 0, textAlign: 'right', position: 'relative' }}
@@ -337,15 +352,11 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                  {item.isPromo && <span style={{ fontSize: 11, background: '#dc2626', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>AKCIA</span>}
-                  <span style={{ fontWeight: 700, color: item.isPromo ? '#dc2626' : '#1e293b', fontSize: 15 }}>{item.price.toFixed(2)} €</span>
-                </div>
+                <div style={{ fontWeight: 800, color: main, fontSize: 17 }}>{item.price.toFixed(2)} €</div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.unitPrice.toFixed(2)} €/{unitLabel}</div>
-                {(() => { const d = promoDateLabel((item as any).promoFrom, (item as any).promoUntil); return d ? <div style={{ fontSize: 11, color: d.upcoming ? '#dc2626' : '#ea580c', fontWeight: 600, marginTop: 1 }}>{d.upcoming ? '⚠ ' : ''}{d.text}</div> : null })()}
-                {/* Porovnanie s ostatnými obchodmi */}
+                <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
                 {item.allStores.length > 1 && (
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
                     {item.allStores
                       .filter((s: any) => s.storeName !== group.storeName)
                       .slice(0, 2)
@@ -592,7 +603,10 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
                           {itemDone && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
                         </div>
                         <span style={{ flex: 1, fontSize: 13, color: itemDone ? '#94a3b8' : '#475569', textDecoration: itemDone ? 'line-through' : 'none' }}>{item.name}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: itemDone ? '#94a3b8' : '#1e293b', textDecoration: itemDone ? 'line-through' : 'none' }}>{item.price.toFixed(2)} €</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: itemDone ? '#94a3b8' : '#1e293b', textDecoration: itemDone ? 'line-through' : 'none' }}>{item.price.toFixed(2)} €</span>
+                          {!itemDone && <PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} />}
+                        </div>
                       </div>
                     )
                   })}
