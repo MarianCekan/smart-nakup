@@ -31,9 +31,9 @@ function PromoBadge({ from, until }: { from?: string | null; until?: string | nu
   return (
     <span style={{
       fontSize: 11, fontWeight: 600,
-      background: d.upcoming ? '#fef2f2' : '#fff7ed',
-      color: d.upcoming ? '#dc2626' : '#ea580c',
-      border: `1px solid ${d.upcoming ? '#fca5a5' : '#fed7aa'}`,
+      background: d.upcoming ? '#fffbeb' : '#fef2f2',
+      color: d.upcoming ? '#b45309' : '#dc2626',
+      border: `1px solid ${d.upcoming ? '#fcd34d' : '#fca5a5'}`,
       borderRadius: 20, padding: '2px 7px', whiteSpace: 'nowrap',
     }}>
       {d.upcoming ? '⚠ ' : ''}{d.text}
