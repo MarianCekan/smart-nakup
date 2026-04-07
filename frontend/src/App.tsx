@@ -21,7 +21,7 @@ function promoDateLabel(from?: string | null, until?: string | null): { text: st
   if (!from && !until) return null
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = !!from && from > today
-  if (upcoming) return { text: `od ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
+  if (from && until) return { text: `${fmtDate(from)} – ${fmtDate(until)}`, upcoming }
   if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
   return null
 }
