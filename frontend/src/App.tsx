@@ -353,7 +353,6 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 800, color: main, fontSize: 17 }}>{item.price.toFixed(2)} €</div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.unitPrice.toFixed(2)} €/{unitLabel}</div>
                 <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
                 {item.allStores.length > 1 && (
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
