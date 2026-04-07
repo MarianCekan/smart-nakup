@@ -131,7 +131,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [activeIdx, setActiveIdx] = useState(-1)
   const [loading, setLoading] = useState(false)
   const [retrying, setRetrying] = useState(false)
-  const [loadingPromo, setLoadingPromo] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [phraseIdx, setPhraseIdx] = useState(0)
   const debouncedQ = useDebounce(value, 280)
@@ -166,7 +165,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
     let cancelled = false
     setLoading(true)
     setRetrying(false)
-    setLoadingPromo(false)
     const sortByPrice = (hits: ProductHit[]) => [...hits].sort((a, b) => a.bestPrice - b.bestPrice)
     api.search(debouncedQ)
       .then(hits => {
@@ -175,7 +173,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           setActiveIdx(-1)
           if (hits.length > 0) {
             setOpen(true)
-            setLoadingPromo(true)
             setRetrying(false)
           } else {
             // Prvý výsledok prázdny — kompas ešte načítava, zostaneme otvorení a skúsime znova
@@ -194,7 +191,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           if (!cancelled) {
             setSuggestions(sortByPrice(hits))
             setRetrying(false)
-            setLoadingPromo(false)
             if (hits.length > 0) setOpen(true)
           }
         })
@@ -276,15 +272,8 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
               ))}
             </>
           )}
-          {loadingPromo && (
-            <li style={{ padding: '6px 10px', fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.2s infinite' }} />
-              Načítavam akciové ceny…
-            </li>
-          )}
           {suggestions.map((hit, i) => {
             const c = col(hit.bestStore)
-            const unitLabel = hit.unit === 'g' ? 'kg' : hit.unit === 'ml' ? 'l' : hit.unit
             return (
               <li key={hit.groupKey}
                 onClick={() => commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl })}
@@ -295,7 +284,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                   <div style={{ fontSize: 12, color: '#64748b' }}>
                     {hit.packageSize}{hit.unit}
                     {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
-                    <span style={{ color: '#94a3b8', marginLeft: 4 }}>({hit.bestUnitPrice.toFixed(2)} €/{unitLabel})</span>
                     {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
                   </div>
                 </div>
