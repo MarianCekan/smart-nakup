@@ -96,7 +96,10 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
 
   // Porovnáme podľa dátumu (nie timestamp) — akcia platí celý posledný deň
   const todayStr = new Date().toISOString().slice(0, 10)
-  const stores: StorePrice[] = []
+
+  // Zozbieraj všetky platné offers s leaflet URL pre neskoršie načítanie dátumov
+  type OfferTemp = { companyId: string; storeName: string; price: number; leafletUrl: string | null }
+  const offerTemps: OfferTemp[] = []
 
   for (const offer of (product.offers ?? [])) {
     if (offer['@type'] === 'AggregateOffer') continue  // preskočiť súhrn
@@ -110,23 +113,37 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
     const price = parseFloat(offer.price)
     if (!price || isNaN(price)) continue
 
-    // Dedup: ak rovnaký obchod (companyId) už existuje, nechaj nižšiu cenu
-    const existing = stores.find(s => s.companyId === matched.companyId)
-    if (existing) {
-      if (price < existing.price) existing.price = price
-    } else {
-      stores.push({
-        companyId: matched.companyId,
-        storeName: matched.storeName,
-        price,
-        unitPrice: price,
-        isPromo: true,
-        imageUrl: null, // nastavíme nižšie po extrakcii
-      })
-    }
+    offerTemps.push({ ...matched, price, leafletUrl: offer.url ?? null })
   }
 
-  if (!stores.length) return null
+  if (!offerTemps.length) return null
+
+  // Dedup: pre každý obchod (companyId) nechaj najlacnejšiu ponuku (s jej leaflet URL)
+  const byStore = new Map<string, OfferTemp>()
+  for (const o of offerTemps) {
+    const existing = byStore.get(o.companyId)
+    if (!existing || o.price < existing.price) byStore.set(o.companyId, o)
+  }
+
+  // Batch fetch dátumov letákov pre všetky unikátne URL (cached po prvom načítaní)
+  const uniqueLeafletUrls = [...new Set([...byStore.values()].map(o => o.leafletUrl).filter((u): u is string => !!u))]
+  await Promise.all(uniqueLeafletUrls.map(url => fetchLeafletDates(url)))
+
+  // Zostav finálne stores s dátumami
+  const stores: StorePrice[] = [...byStore.values()].map(o => {
+    const dates = o.leafletUrl ? (_leafletDates.get(o.leafletUrl.split('#')[0]) ?? null) : null
+    return {
+      companyId: o.companyId,
+      storeName: o.storeName,
+      price: o.price,
+      unitPrice: o.price,
+      isPromo: true,
+      imageUrl: null, // nastavíme nižšie po extrakcii
+      validFrom: dates?.validFrom ?? null,
+      validUntil: dates?.validUntil ?? null,
+    }
+  })
+
   stores.sort((a, b) => a.price - b.price)
 
   // Cropped product image z HTML (nie JSON-LD ktorý dáva celý leták)
@@ -147,6 +164,22 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
     bestStore: best.storeName,
     bestImageUrl: productImage,
   }
+}
+
+// Leták date cache: leaflet URL (without #fragment) → { validFrom, validUntil } | null
+const _leafletDates = new Map<string, { validFrom: string; validUntil: string } | null>()
+
+async function fetchLeafletDates(leafletUrl: string): Promise<{ validFrom: string; validUntil: string } | null> {
+  const baseUrl = leafletUrl.split('#')[0]
+  if (_leafletDates.has(baseUrl)) return _leafletDates.get(baseUrl)!
+  const html = await fetchHtml(baseUrl)
+  if (!html) { _leafletDates.set(baseUrl, null); return null }
+  const schemas = extractJsonLd(html)
+  const s = schemas.find((sc: any) => sc.startDate && sc.endDate)
+  if (!s) { _leafletDates.set(baseUrl, null); return null }
+  const result = { validFrom: String(s.startDate).slice(0, 10), validUntil: String(s.endDate).slice(0, 10) }
+  _leafletDates.set(baseUrl, result)
+  return result
 }
 
 // Session cache: groupKey → ProductGroup

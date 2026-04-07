@@ -13,6 +13,19 @@ const COLORS: Record<string, { main: string; bg: string; text?: string; abbr: st
 }
 function col(name: string) { return COLORS[name] ?? { main: '#475569', bg: '#f8fafc', abbr: name[0] ?? '?' } }
 
+function fmtDate(iso: string): string {
+  const [, m, d] = iso.split('-')
+  return `${parseInt(d)}.${parseInt(m)}.`
+}
+function promoDateLabel(from?: string | null, until?: string | null): { text: string; upcoming: boolean } | null {
+  if (!from && !until) return null
+  const today = new Date().toISOString().slice(0, 10)
+  const upcoming = !!from && from > today
+  if (upcoming) return { text: `od ${fmtDate(from!)}${until ? ` – ${fmtDate(until)}` : ''}`, upcoming: true }
+  if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
+  return null
+}
+
 const STORE_LOGO_EXT: Record<string, string> = {
   'Lidl': 'png', 'Kaufland': 'png', 'Billa': 'png', 'Terno': 'png',
   'Tesco': 'png', 'Fresh': 'png',
@@ -268,6 +281,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                     {hit.packageSize}{hit.unit}
                     {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
                     <span style={{ color: '#94a3b8', marginLeft: 4 }}>({hit.bestUnitPrice.toFixed(2)} €/{unitLabel})</span>
+                    {(() => { const d = promoDateLabel(hit.promoFrom, hit.promoUntil); return d ? <span style={{ marginLeft: 6, fontSize: 11, color: d.upcoming ? '#ea580c' : '#94a3b8', fontWeight: d.upcoming ? 600 : 400 }}>{d.text}</span> : null })()}
                   </div>
                 </div>
                 <div style={{ flexShrink: 0, textAlign: 'right', position: 'relative' }}
@@ -328,6 +342,7 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
                   <span style={{ fontWeight: 700, color: item.isPromo ? '#dc2626' : '#1e293b', fontSize: 15 }}>{item.price.toFixed(2)} €</span>
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.unitPrice.toFixed(2)} €/{unitLabel}</div>
+                {(() => { const d = promoDateLabel((item as any).promoFrom, (item as any).promoUntil); return d ? <div style={{ fontSize: 11, color: d.upcoming ? '#ea580c' : '#94a3b8', fontWeight: d.upcoming ? 600 : 400, marginTop: 1 }}>{d.upcoming ? '⚠ ' : ''}{d.text}</div> : null })()}
                 {/* Porovnanie s ostatnými obchodmi */}
                 {item.allStores.length > 1 && (
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
@@ -1018,8 +1033,8 @@ export default function App() {
     await runOptimize(newItems)
   }
 
-  if (screen === 'login') return <LoginScreen onSwitch={() => setScreen('register')} onBack={() => setScreen('main')} onSuccess={() => setScreen('main')} />
-  if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => setScreen('main')} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
+  if (screen === 'login') return <LoginScreen onSwitch={() => setScreen('register')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onSuccess={() => setScreen('main')} />
+  if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
   if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
   if (screen === 'saved') return <SavedListsScreen onBack={() => setScreen('main')} />
   if (screen === 'recipes') return (

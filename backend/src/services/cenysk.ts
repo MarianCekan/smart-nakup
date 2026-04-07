@@ -115,6 +115,8 @@ export type StorePrice = {
   unitPrice: number
   isPromo: boolean
   imageUrl: string | null
+  validFrom?: string | null
+  validUntil?: string | null
 }
 
 export type ProductGroup = {

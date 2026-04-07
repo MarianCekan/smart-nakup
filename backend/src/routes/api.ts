@@ -35,6 +35,7 @@ router.get('/stores', (_req, res) => {
 })
 
 function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' | 'kompas') {
+  const bestStore = (g.stores as any[])?.find(s => s.storeName === g.bestStore)
   return {
     groupKey: g.groupKey,
     name: g.name,
@@ -47,6 +48,8 @@ function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' 
     storeCount: g.stores.length,
     storeNames: Array.from(new Set<string>(g.stores.map((s: any) => s.storeName))),
     source,
+    promoFrom: bestStore?.validFrom ?? null,
+    promoUntil: bestStore?.validUntil ?? null,
   }
 }
 
@@ -169,7 +172,7 @@ router.post('/optimize', async (req, res) => {
         kompasStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
       }
       const grp = kompasStoreMap.get(chosen.companyId)!
-      grp.items.push({ query: item.query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores })
+      grp.items.push({ query: item.query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null })
       grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
     }
 
