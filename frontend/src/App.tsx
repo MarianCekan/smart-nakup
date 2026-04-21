@@ -349,12 +349,19 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
                 )}
                 <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
                 {item.allStores.length > 1 && (
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+                  <div style={{ fontSize: 11, marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {item.allStores
                       .filter((s: any) => s.storeName !== group.storeName)
                       .slice(0, 2)
-                      .map((s: any) => `${s.storeName} ${s.price.toFixed(2)}€`)
-                      .join(' · ')}
+                      .map((s: any) => {
+                        const diff = parseFloat((s.price - item.price).toFixed(2))
+                        const plus = diff > 0
+                        return (
+                          <span key={s.storeName} style={{ color: plus ? '#dc2626' : '#16a34a' }}>
+                            {s.storeName} {plus ? '+' : ''}{diff.toFixed(2)}€
+                          </span>
+                        )
+                      })}
                   </div>
                 )}
               </div>
