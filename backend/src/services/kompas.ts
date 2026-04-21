@@ -152,6 +152,8 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
 
   const best = stores[0]
 
+  const worst = stores[stores.length - 1]
+
   return {
     groupKey: `kompas:${slug}`,
     name: product.name ?? slug,
@@ -163,6 +165,8 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
     bestUnitPrice: best.price,
     bestStore: best.storeName,
     bestImageUrl: productImage,
+    worstPrice: stores.length > 1 ? worst.price : undefined,
+    worstStore: stores.length > 1 ? worst.storeName : undefined,
   }
 }
 

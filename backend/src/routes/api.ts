@@ -36,6 +36,9 @@ router.get('/stores', (_req, res) => {
 
 function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' | 'kompas') {
   const bestStore = (g.stores as any[])?.find(s => s.storeName === g.bestStore)
+  const saving = g.worstPrice && g.worstPrice > g.bestPrice
+    ? parseFloat((g.worstPrice - g.bestPrice).toFixed(2))
+    : null
   return {
     groupKey: g.groupKey,
     name: g.name,
@@ -50,6 +53,8 @@ function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' 
     source,
     promoFrom: bestStore?.validFrom ?? null,
     promoUntil: bestStore?.validUntil ?? null,
+    saving,
+    worstStore: g.worstStore ?? null,
   }
 }
 
@@ -172,7 +177,9 @@ router.post('/optimize', async (req, res) => {
         kompasStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
       }
       const grp = kompasStoreMap.get(chosen.companyId)!
-      grp.items.push({ query: item.query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null })
+      const worstPrice = group.worstPrice
+      const saving = worstPrice && worstPrice > chosen.price ? parseFloat((worstPrice - chosen.price).toFixed(2)) : null
+      grp.items.push({ query: item.query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null })
       grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
     }
 

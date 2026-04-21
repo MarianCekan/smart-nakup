@@ -21,6 +21,8 @@ export type ProductHit = {
   storeNames: string[]
   promoFrom?: string | null
   promoUntil?: string | null
+  saving?: number | null
+  worstStore?: string | null
 }
 
 export type StorePrice = {
@@ -65,6 +67,8 @@ export type OptimizeResult = {
       allStores: StorePrice[]
       promoFrom?: string | null
       promoUntil?: string | null
+      saving?: number | null
+      worstStore?: string | null
     }[]
     subtotal: number
   }[]

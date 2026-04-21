@@ -284,6 +284,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                   <div style={{ fontSize: 12, color: '#64748b' }}>
                     {hit.packageSize}{hit.unit}
                     {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
+                    {hit.saving && hit.saving > 0 && <span style={{ marginLeft: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>−{hit.saving.toFixed(2)} € vs {hit.worstStore}</span>}
                     {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
                   </div>
                 </div>
@@ -341,6 +342,11 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 800, color: main, fontSize: 17 }}>{item.price.toFixed(2)} €</div>
+                {(item as any).saving > 0 && (
+                  <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, marginTop: 1 }}>
+                    ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
+                  </div>
+                )}
                 <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
                 {item.allStores.length > 1 && (
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
@@ -1180,15 +1186,18 @@ export default function App() {
 
         {result && (
           <div>
-            {result.total_saving > 0 && result.stores.length >= 2 && (
-              <div style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '2px solid #bbf7d0', borderRadius: 14, padding: '14px 18px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#15803d' }}>Ušetríš oproti najdrahšiemu obchodu</div>
-                  <div style={{ fontSize: 12, color: '#16a34a' }}>celková optimalizácia nákupu</div>
+            {(() => {
+              const totalSaving = result.stores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
+              return totalSaving >= 0.01 ? (
+                <div style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '2px solid #86efac', borderRadius: 14, padding: '14px 18px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>🎉 Celková úspora</div>
+                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>oproti najdrahšiemu obchodu pre každú položku</div>
+                  </div>
+                  <div style={{ fontSize: 30, fontWeight: 900, color: '#15803d' }}>{totalSaving.toFixed(2)} €</div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{result.total_saving.toFixed(2)} €</div>
-              </div>
-            )}
+              ) : null
+            })()}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {result.stores.map(g => <ResultCard key={g.companyId} group={g} />)}
             </div>

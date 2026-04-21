@@ -130,6 +130,8 @@ export type ProductGroup = {
   bestUnitPrice: number
   bestStore: string
   bestImageUrl: string | null
+  worstPrice?: number
+  worstStore?: string
 }
 
 // ─── Normalizácia ─────────────────────────────────────────────────────────────
