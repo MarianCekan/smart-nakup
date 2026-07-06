@@ -106,7 +106,9 @@ function extractSlugs(html: string): string[] {
   return slugs
 }
 
-async function fetchHtml(url: string): Promise<string | null> {
+const CF_CHALLENGE = 'Just a moment'
+
+async function fetchDirect(url: string): Promise<string | null> {
   try {
     const fetchUrl = PROXY ? `${PROXY}?url=${encodeURIComponent(url)}` : url
     const res = await fetch(fetchUrl, { headers: PROXY ? {} : HEADERS })
@@ -119,6 +121,29 @@ async function fetchHtml(url: string): Promise<string | null> {
     console.log(`kompas fetchHtml error: ${e.message} — ${url}`)
     return null
   }
+}
+
+// r.jina.ai relay — prejde cez Cloudflare challenge ktorý blokuje datacenter IP (Render/Vercel)
+async function fetchViaJina(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, { headers: { 'X-Return-Format': 'html' } })
+    if (!res.ok) {
+      console.log(`kompas jina relay ${res.status} — ${url}`)
+      return null
+    }
+    const html = await res.text()
+    return html.includes(CF_CHALLENGE) ? null : html
+  } catch (e: any) {
+    console.log(`kompas jina relay error: ${e.message} — ${url}`)
+    return null
+  }
+}
+
+async function fetchHtml(url: string): Promise<string | null> {
+  const html = await fetchDirect(url)
+  if (html && !html.includes(CF_CHALLENGE)) return html
+  console.log(`kompas: CF challenge/prazdno, fallback na jina — ${url}`)
+  return fetchViaJina(url)
 }
 
 async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
@@ -175,6 +200,9 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
 
 // Session cache: groupKey → ProductGroup
 const _cache = new Map<string, ProductGroup>()
+
+// In-flight searches: query key → promise (dedupe súbežných volaní)
+const _inflight = new Map<string, Promise<ProductGroup[]>>()
 
 // Query cache: query → { results, ts }
 const _queryCache = new Map<string, { results: ProductGroup[]; ts: number }>()
@@ -240,14 +268,25 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
   const cached = _queryCache.get(key)
   if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results
 
-  // Race: scrape vs timeout 1.5s
+  // Dedupe súbežných požiadaviek na tú istú query + zapíš cache aj keď race timeoutne
+  // (FE retry potom nájde výsledky v cache namiesto nového scrape-u)
+  let inflight = _inflight.get(key)
+  if (!inflight) {
+    inflight = _doSearch(query, limit)
+      .then(results => {
+        if (results.length) _queryCache.set(key, { results, ts: Date.now() })
+        return results
+      })
+      .finally(() => _inflight.delete(key))
+    _inflight.set(key, inflight)
+  }
+
   const start = Date.now()
   const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 10000))
-  const results = await Promise.race([_doSearch(query, limit), timeout])
+  const results = await Promise.race([inflight, timeout])
   const elapsed = Date.now() - start
 
   if (results.length) {
-    _queryCache.set(key, { results, ts: Date.now() })
     console.log(`✅ kompas "${query}": ${results.length} výsledkov za ${elapsed}ms`)
   } else {
     console.log(`⏱️ kompas "${query}": timeout/no results po ${elapsed}ms`)

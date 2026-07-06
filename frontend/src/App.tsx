@@ -183,20 +183,22 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false) })
-    // Retry po 6s — kompas zvyčajne trvá 3-8s
-    const refresh = setTimeout(() => {
+    // Retry po 6s a 14s — kompas scrape trvá 3-8s, cez jina relay aj dlhšie
+    const mkRetry = (delay: number, last: boolean) => setTimeout(() => {
       if (cancelled) return
       api.search(debouncedQ)
         .then(hits => {
           if (!cancelled) {
             setSuggestions(sortByPrice(hits))
-            setRetrying(false)
-            if (hits.length > 0) setOpen(true)
+            if (hits.length > 0) { setOpen(true); setRetrying(false) }
+            else if (last) setRetrying(false)
           }
         })
-        .catch(() => { if (!cancelled) setRetrying(false) })
-    }, 6000)
-    return () => { cancelled = true; clearTimeout(refresh) }
+        .catch(() => { if (!cancelled && last) setRetrying(false) })
+    }, delay)
+    const r1 = mkRetry(6000, false)
+    const r2 = mkRetry(14000, true)
+    return () => { cancelled = true; clearTimeout(r1); clearTimeout(r2) }
   }, [debouncedQ])
 
   const commit = useCallback((item: CartItem) => {
