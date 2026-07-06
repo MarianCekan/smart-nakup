@@ -179,7 +179,7 @@ router.post('/optimize', async (req, res) => {
       const grp = kompasStoreMap.get(chosen.companyId)!
       const worstPrice = group.worstPrice
       const saving = worstPrice && worstPrice > chosen.price ? parseFloat((worstPrice - chosen.price).toFixed(2)) : null
-      grp.items.push({ query: item.query, name: group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null })
+      grp.items.push({ query: item.query, name: (chosen as any).productName ?? group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null })
       grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
     }
 

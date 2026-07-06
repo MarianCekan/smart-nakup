@@ -117,6 +117,7 @@ export type StorePrice = {
   imageUrl: string | null
   validFrom?: string | null
   validUntil?: string | null
+  productName?: string
 }
 
 export type ProductGroup = {

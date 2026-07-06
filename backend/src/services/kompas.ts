@@ -39,24 +39,59 @@ function deaccent(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
-// Extrakcia cropped product image — pattern: {slug}--{itemId}.jpg (NIE leták)
-function extractProductImage(html: string): string | null {
-  const re = /src=["']((?:https:\/\/kompaszliav\.sk)?\/public\/gimg\/[^"']+--\d+\.jpg)["']/i
-  const m = re.exec(html)
-  if (!m) return null
-  const url = m[1]
-  return url.startsWith('http') ? url : `${BASE}${url}`
+// Produktová karta z HTML — každá ponuka má vlastný produkt, obrázok, obchod, cenu a dátumy
+type ProductCard = {
+  companyId: string
+  storeName: string
+  productName: string
+  imageUrl: string | null
+  price: number
+  validFrom: string | null
+  validUntil: string | null
 }
 
-// Jednoduchý regex extract JSON-LD z HTML
-function extractJsonLd(html: string): any[] {
-  const results: any[] = []
-  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+// "16.6. - 13.7.2026" alebo "27.6.2026 - 13.7.2026" → ISO dátumy
+function parseAvailability(text: string): { from: string | null; until: string | null } {
+  const m = /(\d{1,2})\.(\d{1,2})\.(\d{4})?\s*-\s*(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(text)
+  if (!m) return { from: null, until: null }
+  const pad = (n: string) => n.padStart(2, '0')
+  const untilY = m[6]
+  const fromY = m[3] ?? untilY
+  let from = `${fromY}-${pad(m[2])}-${pad(m[1])}`
+  const until = `${untilY}-${pad(m[5])}-${pad(m[4])}`
+  if (from > until) from = `${parseInt(fromY) - 1}-${pad(m[2])}-${pad(m[1])}`
+  return { from, until }
+}
+
+function parseProductCards(html: string): ProductCard[] {
+  const cards: ProductCard[] = []
+  const re = /<a href="[^"]*" class="product-card[^"]*">([\s\S]*?)<\/a>/g
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
-    try { results.push(JSON.parse(m[1])) } catch { /* skip malformed */ }
+    const body = m[1]
+    const storeName = /class="product-store">\s*([^<]+?)\s*</.exec(body)?.[1] ?? ''
+    const matched = matchStore(storeName)
+    if (!matched) continue  // obchod mimo našej ponuky (Metro, Klas, COOP…)
+
+    const priceStr = /class="product-price">\s*([\d.,]+)/.exec(body)?.[1]
+    const price = priceStr ? parseFloat(priceStr.replace(',', '.')) : NaN
+    if (!price || isNaN(price)) continue
+
+    const avail = /class="product-availability">\s*([^<]+?)\s*</.exec(body)?.[1] ?? ''
+    const { from, until } = parseAvailability(avail)
+    const imgRaw = /src="((?:https:\/\/kompaszliav\.sk)?\/public\/gimg\/[^"]+--\d+\.(?:jpe?g|png))"/i.exec(body)?.[1] ?? null
+    const productName = /monitoring-data">\s*<span>\s*([^<]+?)\s*</.exec(body)?.[1] ?? ''
+
+    cards.push({
+      ...matched,
+      productName,
+      imageUrl: imgRaw ? (imgRaw.startsWith('http') ? imgRaw : `${BASE}${imgRaw}`) : null,
+      price,
+      validFrom: from,
+      validUntil: until,
+    })
   }
-  return results
+  return cards
 }
 
 // Extrakcia product slugov zo search stránky
@@ -90,100 +125,52 @@ async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
   const html = await fetchHtml(`${BASE}/produkty/${slug}`)
   if (!html) return null
 
-  const schemas = extractJsonLd(html)
-  const product = schemas.find(s => s['@type'] === 'Product' && s.offers)
-  if (!product) return null
-
   // Porovnáme podľa dátumu (nie timestamp) — akcia platí celý posledný deň
   const todayStr = new Date().toISOString().slice(0, 10)
+  const cards = parseProductCards(html).filter(c => !c.validUntil || c.validUntil >= todayStr)
+  if (!cards.length) return null
 
-  // Zozbieraj všetky platné offers s leaflet URL pre neskoršie načítanie dátumov
-  type OfferTemp = { companyId: string; storeName: string; price: number; leafletUrl: string | null }
-  const offerTemps: OfferTemp[] = []
-
-  for (const offer of (product.offers ?? [])) {
-    if (offer['@type'] === 'AggregateOffer') continue  // preskočiť súhrn
-    const validUntilStr = offer.priceValidUntil ? offer.priceValidUntil.slice(0, 10) : '9999-12-31'
-    if (validUntilStr < todayStr) continue  // vypršaná akcia
-
-    const storeName = offer.offeredBy?.name ?? ''
-    const matched = matchStore(storeName)
-    if (!matched) continue  // neznámy obchod — preskočíme
-
-    const price = parseFloat(offer.price)
-    if (!price || isNaN(price)) continue
-
-    offerTemps.push({ ...matched, price, leafletUrl: offer.url ?? null })
+  // Pre každý obchod nechaj najlacnejšiu kartu — každá si nesie VLASTNÝ obrázok, názov a dátumy
+  const byStore = new Map<string, ProductCard>()
+  for (const c of cards) {
+    const existing = byStore.get(c.companyId)
+    if (!existing || c.price < existing.price) byStore.set(c.companyId, c)
   }
 
-  if (!offerTemps.length) return null
-
-  // Dedup: pre každý obchod (companyId) nechaj najlacnejšiu ponuku (s jej leaflet URL)
-  const byStore = new Map<string, OfferTemp>()
-  for (const o of offerTemps) {
-    const existing = byStore.get(o.companyId)
-    if (!existing || o.price < existing.price) byStore.set(o.companyId, o)
-  }
-
-  // Batch fetch dátumov letákov pre všetky unikátne URL (cached po prvom načítaní)
-  const uniqueLeafletUrls = [...new Set([...byStore.values()].map(o => o.leafletUrl).filter((u): u is string => !!u))]
-  await Promise.all(uniqueLeafletUrls.map(url => fetchLeafletDates(url)))
-
-  // Zostav finálne stores s dátumami
-  const stores: StorePrice[] = [...byStore.values()].map(o => {
-    const dates = o.leafletUrl ? (_leafletDates.get(o.leafletUrl.split('#')[0]) ?? null) : null
-    return {
-      companyId: o.companyId,
-      storeName: o.storeName,
-      price: o.price,
-      unitPrice: o.price,
-      isPromo: true,
-      imageUrl: null, // nastavíme nižšie po extrakcii
-      validFrom: dates?.validFrom ?? null,
-      validUntil: dates?.validUntil ?? null,
-    }
-  })
+  const stores: StorePrice[] = [...byStore.values()].map(c => ({
+    companyId: c.companyId,
+    storeName: c.storeName,
+    price: c.price,
+    unitPrice: c.price,
+    isPromo: true,
+    imageUrl: c.imageUrl,
+    validFrom: c.validFrom,
+    validUntil: c.validUntil,
+    productName: c.productName || undefined,
+  }))
 
   stores.sort((a, b) => a.price - b.price)
 
-  // Cropped product image z HTML (nie JSON-LD ktorý dáva celý leták)
-  const productImage = extractProductImage(html)
-  for (const s of stores) s.imageUrl = productImage
-
   const best = stores[0]
-
   const worst = stores[stores.length - 1]
+  const categoryName = slug.replace(/-/g, ' ')
+  const bestName = (best as any).productName ?? categoryName
 
   return {
     groupKey: `kompas:${slug}`,
-    name: product.name ?? slug,
-    nameLower: deaccent(product.name ?? slug),
+    name: bestName,
+    // matching v search score potrebuje aj názov kategórie (query „maslo" vs karta „Tami Tatranské maslo")
+    nameLower: deaccent(`${categoryName} ${bestName}`),
     unit: 'ks',
     packageSize: 1,
     stores,
     bestPrice: best.price,
     bestUnitPrice: best.price,
     bestStore: best.storeName,
-    bestImageUrl: productImage,
+    bestImageUrl: best.imageUrl,
     worstPrice: stores.length > 1 ? worst.price : undefined,
     worstStore: stores.length > 1 ? worst.storeName : undefined,
   }
-}
-
-// Leták date cache: leaflet URL (without #fragment) → { validFrom, validUntil } | null
-const _leafletDates = new Map<string, { validFrom: string; validUntil: string } | null>()
-
-async function fetchLeafletDates(leafletUrl: string): Promise<{ validFrom: string; validUntil: string } | null> {
-  const baseUrl = leafletUrl.split('#')[0]
-  if (_leafletDates.has(baseUrl)) return _leafletDates.get(baseUrl)!
-  const html = await fetchHtml(baseUrl)
-  if (!html) { _leafletDates.set(baseUrl, null); return null }
-  const schemas = extractJsonLd(html)
-  const s = schemas.find((sc: any) => sc.startDate && sc.endDate)
-  if (!s) { _leafletDates.set(baseUrl, null); return null }
-  const result = { validFrom: String(s.startDate).slice(0, 10), validUntil: String(s.endDate).slice(0, 10) }
-  _leafletDates.set(baseUrl, result)
-  return result
 }
 
 // Session cache: groupKey → ProductGroup
