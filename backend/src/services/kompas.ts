@@ -146,56 +146,73 @@ async function fetchHtml(url: string): Promise<string | null> {
   return fetchViaJina(url)
 }
 
-async function fetchProductGroup(slug: string): Promise<ProductGroup | null> {
-  const html = await fetchHtml(`${BASE}/produkty/${slug}`)
-  if (!html) return null
+// Jedna kategória (slug) môže obsahovať viac rôznych produktov/balení —
+// klastrujeme podľa normalizovaného názvu, aby sa neporovnávalo 50g balenie s 250g sáčkom
+async function fetchProductGroups(slug: string, presetHtml?: string): Promise<ProductGroup[]> {
+  const html = presetHtml ?? await fetchHtml(`${BASE}/produkty/${slug}`)
+  if (!html) return []
 
   // Porovnáme podľa dátumu (nie timestamp) — akcia platí celý posledný deň
   const todayStr = new Date().toISOString().slice(0, 10)
   const cards = parseProductCards(html).filter(c => !c.validUntil || c.validUntil >= todayStr)
-  if (!cards.length) return null
+  if (!cards.length) return []
 
-  // Pre každý obchod nechaj najlacnejšiu kartu — každá si nesie VLASTNÝ obrázok, názov a dátumy
-  const byStore = new Map<string, ProductCard>()
-  for (const c of cards) {
-    const existing = byStore.get(c.companyId)
-    if (!existing || c.price < existing.price) byStore.set(c.companyId, c)
-  }
-
-  const stores: StorePrice[] = [...byStore.values()].map(c => ({
-    companyId: c.companyId,
-    storeName: c.storeName,
-    price: c.price,
-    unitPrice: c.price,
-    isPromo: true,
-    imageUrl: c.imageUrl,
-    validFrom: c.validFrom,
-    validUntil: c.validUntil,
-    productName: c.productName || undefined,
-  }))
-
-  stores.sort((a, b) => a.price - b.price)
-
-  const best = stores[0]
-  const worst = stores[stores.length - 1]
   const categoryName = slug.replace(/-/g, ' ')
-  const bestName = (best as any).productName ?? categoryName
 
-  return {
-    groupKey: `kompas:${slug}`,
-    name: bestName,
-    // matching v search score potrebuje aj názov kategórie (query „maslo" vs karta „Tami Tatranské maslo")
-    nameLower: deaccent(`${categoryName} ${bestName}`),
-    unit: 'ks',
-    packageSize: 1,
-    stores,
-    bestPrice: best.price,
-    bestUnitPrice: best.price,
-    bestStore: best.storeName,
-    bestImageUrl: best.imageUrl,
-    worstPrice: stores.length > 1 ? worst.price : undefined,
-    worstStore: stores.length > 1 ? worst.storeName : undefined,
+  // Klaster = rovnaký normalizovaný názov produktu naprieč obchodmi
+  const clusters = new Map<string, ProductCard[]>()
+  for (const c of cards) {
+    const k = deaccent(c.productName || categoryName).replace(/\s+/g, ' ')
+    const arr = clusters.get(k)
+    if (arr) arr.push(c); else clusters.set(k, [c])
   }
+
+  const groups: ProductGroup[] = []
+  for (const [key, cs] of clusters) {
+    // V rámci klastra: najlacnejšia karta pre každý obchod
+    const byStore = new Map<string, ProductCard>()
+    for (const c of cs) {
+      const existing = byStore.get(c.companyId)
+      if (!existing || c.price < existing.price) byStore.set(c.companyId, c)
+    }
+
+    const stores: StorePrice[] = [...byStore.values()].map(c => ({
+      companyId: c.companyId,
+      storeName: c.storeName,
+      price: c.price,
+      unitPrice: c.price,
+      isPromo: true,
+      imageUrl: c.imageUrl,
+      validFrom: c.validFrom,
+      validUntil: c.validUntil,
+      productName: c.productName || undefined,
+    }))
+    stores.sort((a, b) => a.price - b.price)
+
+    const best = stores[0]
+    const worst = stores[stores.length - 1]
+    const name = cs[0].productName || categoryName
+
+    groups.push({
+      groupKey: `kompas:${slug}:${key.replace(/[^a-z0-9]+/g, '-')}`,
+      name,
+      // matching v search score potrebuje aj názov kategórie (query „maslo" vs karta „Tami Tatranské maslo")
+      nameLower: deaccent(`${categoryName} ${name}`),
+      unit: 'ks',
+      packageSize: 1,
+      stores,
+      bestPrice: best.price,
+      bestUnitPrice: best.price,
+      bestStore: best.storeName,
+      bestImageUrl: best.imageUrl,
+      // úspora len v rámci TOHO ISTÉHO produktu vo viacerých obchodoch
+      worstPrice: stores.length > 1 ? worst.price : undefined,
+      worstStore: stores.length > 1 ? worst.storeName : undefined,
+    })
+  }
+
+  groups.sort((a, b) => a.bestPrice - b.bestPrice)
+  return groups
 }
 
 // Session cache: groupKey → ProductGroup
@@ -236,9 +253,16 @@ async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> 
   }))
   for (const e of extraHtmls) if (e) allHtmls.push(e)
 
-  // Každú kategóriu sparsuj cez fetchProductGroup (JSON-LD)
-  const groups = await Promise.all(allHtmls.map(({ slug }) => fetchProductGroup(slug)))
-  const valid = groups.filter((g): g is ProductGroup => g !== null)
+  // Každú kategóriu sparsuj na klastre produktov (HTML už máme — žiadny druhý fetch)
+  const nested = await Promise.all(allHtmls.map(({ slug, html }) => fetchProductGroups(slug, html)))
+  // Dedup — ten istý produkt sa objavuje vo viacerých kategóriách (slugoch)
+  const seen = new Set<string>()
+  const valid = nested.flat().filter(g => {
+    const k = `${deaccent(g.name)}|${g.bestPrice}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
 
   const q = deaccent(query.trim())
   const scored = valid.map(g => {
