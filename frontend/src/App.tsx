@@ -132,6 +132,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [loading, setLoading] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ right: number; top: number }>({ right: 0, top: 0 })
   const [phraseIdx, setPhraseIdx] = useState(0)
   const debouncedQ = useDebounce(value, 280)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -290,18 +291,23 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                     {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
                   </div>
                 </div>
-                <div style={{ flexShrink: 0, textAlign: 'right', position: 'relative' }}
-                  onMouseEnter={() => setHoveredKey(hit.groupKey)}
+                <div style={{ flexShrink: 0, textAlign: 'right' }}
+                  onMouseEnter={e => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setHoveredKey(hit.groupKey)
+                    setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
+                  }}
                   onMouseLeave={() => setHoveredKey(null)}>
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: c.main + '18', color: c.main, fontWeight: 600, whiteSpace: 'nowrap', cursor: hit.storeCount > 1 ? 'default' : undefined }}>
                     {hit.bestStore}{hit.storeCount > 1 ? ` +${hit.storeCount - 1}` : ''}
                   </span>
                   {hoveredKey === hit.groupKey && hit.storeNames && hit.storeNames.length > 1 && (
                     <div style={{
-                      position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 400,
+                      // fixed → unikne overflow klipu scrollovateľného dropdownu
+                      position: 'fixed', right: hoverPos.right, top: hoverPos.top, zIndex: 400,
                       background: '#1e293b', color: '#fff', borderRadius: 8, padding: '6px 10px',
                       fontSize: 11, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                      pointerEvents: 'none',
+                      pointerEvents: 'none', textAlign: 'left',
                     }}>
                       {hit.storeNames.map(n => (
                         <div key={n} style={{ padding: '1px 0' }}>{n}</div>

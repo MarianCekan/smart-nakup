@@ -3,15 +3,15 @@
   "configurations": [
     {
       "name": "backend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "backend"],
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["backend/node_modules/tsx/dist/cli.mjs", "watch", "backend/src/index.ts"],
       "port": 3001,
       "autoPort": false
     },
     {
       "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend", "--port", "5173"],
       "port": 5173
     }
   ]
