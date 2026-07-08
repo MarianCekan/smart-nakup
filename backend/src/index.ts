@@ -7,6 +7,7 @@ import express from 'express'
 import cors from 'cors'
 import { toNodeHandler } from 'better-auth/node'
 import { router } from './routes/api.js'
+import { listsRouter } from './routes/lists.js'
 import { auth } from './auth.js'
 import { getCache } from './services/cenysk.js'
 
@@ -30,6 +31,7 @@ app.use(cors({
 app.all('/api/auth/*', toNodeHandler(auth))
 
 app.use(express.json())
+app.use('/api/v1/lists', listsRouter)
 app.use('/api/v1', router)
 app.get('/health', (_req, res) => res.json({ ok: true }))
 

@@ -1,7 +1,7 @@
 const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001') + '/api/v1'
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, ...init })
+  const res = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, credentials: 'include', ...init })
   if (!res.ok) throw new Error(`API ${res.status}`)
   return res.json()
 }
@@ -79,7 +79,19 @@ export type OptimizeResult = {
   needsApproval: NeedsApproval[]
 }
 
+export type SavedListDto = {
+  id: string
+  name: string
+  savedAt: string
+  stores: OptimizeResult['stores']
+  unmatched: string[]
+}
+
 export const api = {
+  getLists: () => fetchJson<SavedListDto[]>('/lists'),
+  saveList: (name: string, stores: OptimizeResult['stores'], unmatched: string[]) =>
+    fetchJson<SavedListDto>('/lists', { method: 'POST', body: JSON.stringify({ name, stores, unmatched }) }),
+  deleteList: (id: string) => fetchJson<{ ok: boolean }>(`/lists/${id}`, { method: 'DELETE' }),
   stores: () => fetchJson<Store[]>('/stores'),
   search: (q: string) => fetchJson<ProductHit[]>(`/products/search?q=${encodeURIComponent(q)}`),
   status: () => fetchJson<{ ok: boolean; rawProducts: number; groups: number; ageMinutes: number }>('/status'),

@@ -105,10 +105,6 @@ function loadSavedLists(): SavedList[] {
   try { return JSON.parse(localStorage.getItem('smartnakup_lists') ?? '[]') } catch { return [] }
 }
 
-function saveLists(lists: SavedList[]) {
-  localStorage.setItem('smartnakup_lists', JSON.stringify(lists))
-}
-
 const LOADING_PHRASES = [
   '🕵️ Prehľadávam letáky…',
   '🥕 Hľadám najlepšiu mrkvu…',
@@ -636,12 +632,31 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
 
 // ─── SavedListsScreen ─────────────────────────────────────────────────────────
 function SavedListsScreen({ onBack }: { onBack: () => void }) {
-  const [lists, setLists] = useState<SavedList[]>(loadSavedLists)
+  const [lists, setLists] = useState<SavedList[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.getLists()
+      .then(dbLists => {
+        // Jednorazová migrácia starých zoznamov z localStorage do DB
+        const local = loadSavedLists()
+        if (local.length > 0) {
+          Promise.all(local.map(l => api.saveList(l.name, l.stores, l.unmatched).catch(() => null)))
+            .then(saved => {
+              localStorage.removeItem('smartnakup_lists')
+              setLists([...saved.filter((s): s is NonNullable<typeof s> => s !== null), ...dbLists])
+            })
+        } else {
+          setLists(dbLists)
+        }
+      })
+      .catch(() => setLists(loadSavedLists()))  // offline/neprihlásený fallback
+      .finally(() => setLoading(false))
+  }, [])
 
   const deleteList = (id: string) => {
-    const updated = lists.filter(l => l.id !== id)
-    saveLists(updated)
-    setLists(updated)
+    setLists(prev => prev.filter(l => l.id !== id))
+    api.deleteList(id).catch(() => {})
   }
 
   return (
@@ -652,7 +667,11 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Uložené zoznamy</h1>
         </div>
 
-        {lists.length === 0 ? (
+        {loading ? (
+          <div style={{ background: '#fff', borderRadius: 18, padding: 32, textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 6px rgba(0,0,0,0.07)', animation: 'shimmer 1.2s infinite' }}>
+            Načítavam zoznamy…
+          </div>
+        ) : lists.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: 18, padding: 32, textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
             <div style={{ fontWeight: 600, fontSize: 15 }}>Žiadne uložené zoznamy</div>
@@ -979,21 +998,18 @@ export default function App() {
   const [pendingApprovals, setPendingApprovals] = useState<NeedsApproval[]>([])
   const [pendingItems, setPendingItems] = useState<CartItem[]>([])
 
-  const saveResult = () => {
+  const saveResult = async () => {
     if (!result) return
     const storeNames = result.stores
       .sort((a, b) => b.items.length - a.items.length)
       .map(s => s.storeName)
     const name = `${formatDate(new Date())} - ${storeNames.join(', ')}`
-    const newList: SavedList = {
-      id: Date.now().toString(),
-      name,
-      savedAt: new Date().toISOString(),
-      stores: result.stores,
-      unmatched: result.unmatched,
+    try {
+      await api.saveList(name, result.stores, result.unmatched)
+    } catch {
+      setError('Zoznam sa nepodarilo uložiť — skús znova')
+      return
     }
-    const updated = [newList, ...loadSavedLists()]
-    saveLists(updated)
     setCartItems([])
     setResult(null)
     setPendingApprovals([])
