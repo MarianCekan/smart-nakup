@@ -5,6 +5,10 @@
       "destination": "https://smart-nakup-backend.onrender.com/api/auth/:path*"
     },
     {
+      "source": "/api/v1/:path*",
+      "destination": "https://smart-nakup-backend.onrender.com/api/v1/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

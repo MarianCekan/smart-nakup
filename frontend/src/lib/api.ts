@@ -1,4 +1,7 @@
-const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001') + '/api/v1'
+// V produkcii ide API cez Vercel rewrite (same-origin) — session cookie z /api/auth
+// je viazaná na vercel.app doménu, priame volanie na onrender.com by ju neposlalo
+const isProd = typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
+const BASE = (isProd ? window.location.origin : (import.meta.env.VITE_API_URL ?? 'http://localhost:3001')) + '/api/v1'
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, credentials: 'include', ...init })
