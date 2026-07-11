@@ -266,24 +266,30 @@ async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> 
 
   const q = deaccent(query.trim())
   const scored = valid.map(g => {
+    // Primárne skóruj podľa NÁZVU PRODUKTU — inak query "cesnak" vyhrá
+    // najlacnejšia "Syrová nátierka s cesnakom" z kategórie cesnak
+    const prod = deaccent(g.name)
+    const cat = (g.groupKey.split(':')[1] ?? '').replace(/-/g, ' ')
     let score = 0
-    if (g.nameLower === q) score = 100
-    else if (g.nameLower.startsWith(q)) score = 80
-    else if (g.nameLower.includes(q)) score = 50
+    if (prod === q) score = 100
+    else if (prod.startsWith(q)) score = 90
+    else if (prod.includes(q)) score = 70
+    else if (cat === q) score = 40        // kategória sedí, ale názov produktu query neobsahuje
+    else if (cat.includes(q) || q.includes(cat)) score = 30
     else {
       const words = q.split(/\s+/).filter(w => w.length > 1)
       const hits = words.filter(w => g.nameLower.includes(w))
-      if (hits.length) score = (hits.length / words.length) * 40
+      if (hits.length) score = (hits.length / words.length) * 25
     }
     return { g, score }
-  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score)
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score || a.g.bestPrice - b.g.bestPrice)
 
   const results = scored.slice(0, limit).map(x => x.g)
   for (const g of results) _cache.set(g.groupKey, g)
   return results
 }
 
-export async function searchKompas(query: string, limit = 6): Promise<ProductGroup[]> {
+export async function searchKompas(query: string, limit = 6, timeoutMs = 10000): Promise<ProductGroup[]> {
   if (query.trim().length < 2) return []
 
   const key = deaccent(query.trim())
@@ -306,7 +312,7 @@ export async function searchKompas(query: string, limit = 6): Promise<ProductGro
   }
 
   const start = Date.now()
-  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), 10000))
+  const timeout = new Promise<ProductGroup[]>(resolve => setTimeout(() => resolve([]), timeoutMs))
   const results = await Promise.race([inflight, timeout])
   const elapsed = Date.now() - start
 

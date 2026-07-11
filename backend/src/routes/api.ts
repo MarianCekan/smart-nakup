@@ -129,7 +129,7 @@ router.post('/recipes/check', async (req, res) => {
   const results: Record<string, ReturnType<typeof toHit> | null> = {}
   await Promise.all(ingredients.map(async q => {
     try {
-      const hits = getKompasQueryCache(q) ?? await searchKompas(q, 3).catch(() => [])
+      const hits = getKompasQueryCache(q) ?? await searchKompas(q, 3, 25000).catch(() => [])
       results[q] = hits.length > 0 ? toHit(hits[0], 'kompas') : null
     } catch { results[q] = null }
   }))
@@ -157,12 +157,19 @@ router.post('/optimize', async (req, res) => {
     const kompasStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
     const kompasUnmatched: string[] = []
 
-    for (const item of items) {
+    // Vyrieš všetky items PARALELNE s dlhším timeoutom — studená cache cez jina relay
+    // môže trvať >10s a sekvenčné čakanie by hádzalo falošné "Nenájdené"
+    const resolved = await Promise.all(items.map(async item => {
       let group = item.groupKey ? getKompasFromCache(item.groupKey) : undefined
       if (!group) {
-        const results = await searchKompas(item.query, 5)
-        group = item.groupKey ? results.find(g => g.groupKey === item.groupKey) : results[0]
+        const results = await searchKompas(item.query, 5, 25000).catch(() => [])
+        // stale groupKey (reštart BE / zmenené kľúče) → fallback na najlepší výsledok
+        group = (item.groupKey ? results.find(g => g.groupKey === item.groupKey) : undefined) ?? results[0]
       }
+      return { item, group }
+    }))
+
+    for (const { item, group } of resolved) {
       if (!group) { kompasUnmatched.push(item.query); continue }
 
       const eligible = (allowedAll.length > 0
