@@ -5,6 +5,7 @@
  */
 
 import type { ProductGroup, StorePrice } from './cenysk.js'
+import { pool } from '../db.js'
 
 const BASE = 'https://kompaszliav.sk'
 
@@ -48,6 +49,18 @@ type ProductCard = {
   price: number
   validFrom: string | null
   validUntil: string | null
+}
+
+// Balenie z názvu produktu: "TAMI maslo 125 g" → 125 g. Ak v názve nie je, jednotku NEPOZNÁME
+// (karta ju neuvádza) — vtedy vraciame null a FE nič nezobrazí (žiadne vymyslené "1ks").
+function parsePack(name: string): { packageSize: number; unit: string } | null {
+  const re = /(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|ks)(?![\w%])/gi
+  let m: RegExpExecArray | null
+  let last: { packageSize: number; unit: string } | null = null
+  while ((m = re.exec(name)) !== null) {
+    last = { packageSize: parseFloat(m[1].replace(',', '.')), unit: m[2].toLowerCase() }
+  }
+  return last
 }
 
 // "16.6. - 13.7.2026" alebo "27.6.2026 - 13.7.2026" → ISO dátumy
@@ -139,11 +152,46 @@ async function fetchViaJina(url: string): Promise<string | null> {
   }
 }
 
+// HTML cache — jina relay je rate-limitovaný, tá istá stránka sa nesmie fetchovať opakovane
+const _htmlCache = new Map<string, { html: string; ts: number }>()
+const HTML_TTL = 30 * 60 * 1000
+
+// Jina RATE limiter — free tier je ~20 req/min, burst = 429. Globálne rozostupy 3.2s
+// medzi štartmi requestov (~18/min) bez ohľadu na počet súbežných queries.
+let _jinaNextAt = 0
+async function withJinaSlot<T>(fn: () => Promise<T>): Promise<T> {
+  const wait = Math.max(0, _jinaNextAt - Date.now())
+  _jinaNextAt = Math.max(Date.now(), _jinaNextAt) + 3200
+  if (wait > 0) await new Promise(r => setTimeout(r, wait))
+  return fn()
+}
+
+// Keď direct fetch narazí na CF challenge, 10 min ho neskúšame (šetrí latenciu)
+let _challengedUntil = 0
+
 async function fetchHtml(url: string): Promise<string | null> {
-  const html = await fetchDirect(url)
-  if (html && !html.includes(CF_CHALLENGE)) return html
-  console.log(`kompas: CF challenge/prazdno, fallback na jina — ${url}`)
-  return fetchViaJina(url)
+  const cached = _htmlCache.get(url)
+  if (cached && Date.now() - cached.ts < HTML_TTL) return cached.html
+
+  let html: string | null = null
+  if (Date.now() > _challengedUntil) {
+    html = await fetchDirect(url)
+    if (html && html.includes(CF_CHALLENGE)) {
+      console.log(`kompas: CF challenge, 10 min prepíname na jina — ${url}`)
+      _challengedUntil = Date.now() + 10 * 60 * 1000
+      html = null
+    }
+  }
+  if (!html) {
+    html = await withJinaSlot(() => fetchViaJina(url))
+    if (!html) {
+      // jina retry raz — 429/timeout býva prechodný
+      await new Promise(r => setTimeout(r, 1500))
+      html = await withJinaSlot(() => fetchViaJina(url))
+    }
+  }
+  if (html) _htmlCache.set(url, { html, ts: Date.now() })
+  return html
 }
 
 // Jedna kategória (slug) môže obsahovať viac rôznych produktov/balení —
@@ -192,14 +240,15 @@ async function fetchProductGroups(slug: string, presetHtml?: string): Promise<Pr
     const best = stores[0]
     const worst = stores[stores.length - 1]
     const name = cs[0].productName || categoryName
+    const pack = parsePack(name)
 
     groups.push({
       groupKey: `kompas:${slug}:${key.replace(/[^a-z0-9]+/g, '-')}`,
       name,
       // matching v search score potrebuje aj názov kategórie (query „maslo" vs karta „Tami Tatranské maslo")
       nameLower: deaccent(`${categoryName} ${name}`),
-      unit: 'ks',
-      packageSize: 1,
+      unit: pack?.unit ?? '',
+      packageSize: pack?.packageSize ?? 0,
       stores,
       bestPrice: best.price,
       bestUnitPrice: best.price,
@@ -233,25 +282,25 @@ function queryToSlug(query: string): string {
 async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> {
   const baseSlug = queryToSlug(query)
 
-  // Paralelne: /produkty/{slug} + /hladaj?f=query (pre extra slug varianty)
-  const [primaryHtml, searchHtml] = await Promise.all([
-    fetchHtml(`${BASE}/produkty/${baseSlug}`),
-    fetchHtml(`${BASE}/hladaj?f=${encodeURIComponent(query)}`),
-  ])
+  // Najprv len primárny slug — typicky stačí (1 stránka/query šetrí jina relay budget)
+  const primaryHtml = await fetchHtml(`${BASE}/produkty/${baseSlug}`)
+  const primaryHasCards = primaryHtml ? primaryHtml.includes('class="product-card') : false
 
-  // Zo search stránky vyber ďalšie kategórie slugy (napr. muka-hladka, muka-polohruba)
-  const extraSlugs = searchHtml
-    ? extractSlugs(searchHtml).filter(s => s !== baseSlug).slice(0, 3)
-    : []
-
-  // Fetch extra kategórií paralelne
   const allHtmls: Array<{ slug: string; html: string }> = []
   if (primaryHtml) allHtmls.push({ slug: baseSlug, html: primaryHtml })
-  const extraHtmls = await Promise.all(extraSlugs.map(async s => {
-    const h = await fetchHtml(`${BASE}/produkty/${s}`)
-    return h ? { slug: s, html: h } : null
-  }))
-  for (const e of extraHtmls) if (e) allHtmls.push(e)
+
+  // /hladaj + extra kategórie LEN keď primárna kategória nemá karty
+  if (!primaryHasCards) {
+    const searchHtml = await fetchHtml(`${BASE}/hladaj?f=${encodeURIComponent(query)}`)
+    if (searchHtml) {
+      const extraSlugs = extractSlugs(searchHtml).filter(s => s !== baseSlug).slice(0, 3)
+      const extraHtmls = await Promise.all(extraSlugs.map(async s => {
+        const h = await fetchHtml(`${BASE}/produkty/${s}`)
+        return h ? { slug: s, html: h } : null
+      }))
+      for (const e of extraHtmls) if (e) allHtmls.push(e)
+    }
+  }
 
   // Každú kategóriu sparsuj na klastre produktov (HTML už máme — žiadny druhý fetch)
   const nested = await Promise.all(allHtmls.map(({ slug, html }) => fetchProductGroups(slug, html)))
@@ -265,28 +314,62 @@ async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> 
   })
 
   const q = deaccent(query.trim())
+  const qWords = q.split(/\s+/).filter(w => w.length > 1)
   const scored = valid.map(g => {
     // Primárne skóruj podľa NÁZVU PRODUKTU — inak query "cesnak" vyhrá
-    // najlacnejšia "Syrová nátierka s cesnakom" z kategórie cesnak
+    // najlacnejšia "Syrová nátierka s cesnakom" z kategórie cesnak.
+    // Všetky plné name-matche majú ROVNAKÉ skóre → medzi nimi rozhoduje cena
+    // (exact "Cibuľa" za 2.45 nesmie poraziť "Clever cibuľa" za 0.59).
     const prod = deaccent(g.name)
     const cat = (g.groupKey.split(':')[1] ?? '').replace(/-/g, ' ')
     let score = 0
-    if (prod === q) score = 100
-    else if (prod.startsWith(q)) score = 90
-    else if (prod.includes(q)) score = 70
+    if (qWords.length && qWords.every(w => prod.includes(w))) score = 80
+    else if (qWords.length && qWords.filter(w => prod.includes(w)).length / qWords.length >= 0.5) score = 60
     else if (cat === q) score = 40        // kategória sedí, ale názov produktu query neobsahuje
     else if (cat.includes(q) || q.includes(cat)) score = 30
     else {
-      const words = q.split(/\s+/).filter(w => w.length > 1)
-      const hits = words.filter(w => g.nameLower.includes(w))
-      if (hits.length) score = (hits.length / words.length) * 25
+      const hits = qWords.filter(w => g.nameLower.includes(w))
+      if (hits.length) score = (hits.length / qWords.length) * 25
     }
     return { g, score }
   }).filter(x => x.score > 0).sort((a, b) => b.score - a.score || a.g.bestPrice - b.g.bestPrice)
 
+  // matchScore pre callerov (recipes/optimize vyžadujú name-match ≥ 50, dropdown berie všetko)
+  for (const x of scored) (x.g as any).matchScore = x.score
+
   const results = scored.slice(0, limit).map(x => x.g)
   for (const g of results) _cache.set(g.groupKey, g)
   return results
+}
+
+// Perzistentná query cache v Postgrese — prežije reštart/sleep Rendera,
+// takže studený štart nemusí nič scrapovať (jina je rate-limitovaná)
+let _dbCacheReady: Promise<void> | null = null
+function ensureDbCache(): Promise<void> {
+  if (!_dbCacheReady) {
+    _dbCacheReady = pool.query(
+      `CREATE TABLE IF NOT EXISTS kompas_cache (key TEXT PRIMARY KEY, results JSONB NOT NULL, ts TIMESTAMPTZ NOT NULL DEFAULT now())`
+    ).then(() => undefined).catch(e => { console.log('kompas_cache init error:', e.message); _dbCacheReady = null })
+  }
+  return _dbCacheReady ?? Promise.resolve()
+}
+
+async function dbCacheGet(key: string): Promise<ProductGroup[] | null> {
+  try {
+    await ensureDbCache()
+    const { rows } = await pool.query(
+      `SELECT results FROM kompas_cache WHERE key = $1 AND ts > now() - interval '2 hours'`, [key]
+    )
+    return rows.length ? rows[0].results as ProductGroup[] : null
+  } catch { return null }
+}
+
+function dbCacheSet(key: string, results: ProductGroup[]) {
+  ensureDbCache().then(() => pool.query(
+    `INSERT INTO kompas_cache (key, results, ts) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET results = $2, ts = now()`,
+    [key, JSON.stringify(results)]
+  )).catch(e => console.log('kompas_cache write error:', e.message))
 }
 
 export async function searchKompas(query: string, limit = 6, timeoutMs = 10000): Promise<ProductGroup[]> {
@@ -294,17 +377,28 @@ export async function searchKompas(query: string, limit = 6, timeoutMs = 10000):
 
   const key = deaccent(query.trim())
 
-  // Query cache hit
+  // 1. pamäťová cache
   const cached = _queryCache.get(key)
   if (cached && Date.now() - cached.ts < QUERY_TTL) return cached.results
 
-  // Dedupe súbežných požiadaviek na tú istú query + zapíš cache aj keď race timeoutne
+  // 2. Postgres cache (prežila reštart) — hydratuj aj pamäťovú a groupKey cache
+  const fromDb = await dbCacheGet(key)
+  if (fromDb && fromDb.length) {
+    _queryCache.set(key, { results: fromDb, ts: Date.now() })
+    for (const g of fromDb) _cache.set(g.groupKey, g)
+    return fromDb
+  }
+
+  // 3. scrape — dedupe súbežných požiadaviek + zapíš cache aj keď race timeoutne
   // (FE retry potom nájde výsledky v cache namiesto nového scrape-u)
   let inflight = _inflight.get(key)
   if (!inflight) {
     inflight = _doSearch(query, limit)
       .then(results => {
-        if (results.length) _queryCache.set(key, { results, ts: Date.now() })
+        if (results.length) {
+          _queryCache.set(key, { results, ts: Date.now() })
+          dbCacheSet(key, results)
+        }
         return results
       })
       .finally(() => _inflight.delete(key))

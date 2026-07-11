@@ -1,12 +1,8 @@
 import { betterAuth } from 'better-auth'
-import { Pool } from 'pg'
 import { Resend } from 'resend'
-
 // pg.Pool has a `connect` method → Better Auth auto-detects it as PostgreSQL
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+export { pool } from './db.js'
+import { pool } from './db.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 

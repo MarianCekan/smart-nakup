@@ -281,8 +281,8 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hit.name}</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
-                    {hit.packageSize}{hit.unit}
-                    {' · '}od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
+                    {hit.packageSize > 0 && `${hit.packageSize}${hit.unit} · `}
+                    od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
                     {hit.saving && hit.saving > 0 && <span style={{ marginLeft: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>−{hit.saving.toFixed(2)} € vs {hit.worstStore}</span>}
                     {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
                   </div>
@@ -340,9 +340,13 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
               <ProductImg src={item.imageUrl} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500, fontSize: 14 }}>{item.query}</div>
-                <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {item.name !== item.query ? item.name + ' · ' : ''}{item.packageSize}{item.unit}
-                </div>
+                {(item.name !== item.query || item.packageSize > 0) && (
+                  <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.name !== item.query ? item.name : ''}
+                    {item.name !== item.query && item.packageSize > 0 ? ' · ' : ''}
+                    {item.packageSize > 0 ? `${item.packageSize}${item.unit}` : ''}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 800, color: main, fontSize: 17 }}>{item.price.toFixed(2)} €</div>
@@ -870,14 +874,27 @@ function RecipesScreen({ onBack, onAddToCart }: {
   const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const checkAvailability = () => {
     setLoading(true)
     const all = [...new Set(RECIPES.flatMap(r => r.ingredients))]
     api.checkIngredients(all)
-      .then(r => setHits(r))
+      .then(r => {
+        setHits(r)
+        // Ak niečo chýba (BE cache sa možno ešte len zohrieva), skús raz potichu znova
+        const missing = all.filter(q => !r[q])
+        if (missing.length > 0 && !retryTimer.current) {
+          retryTimer.current = setTimeout(() => {
+            api.checkIngredients(all).then(r2 => setHits(r2)).catch(() => {})
+          }, 12000)
+        }
+      })
       .catch(() => setHits({}))
       .finally(() => setLoading(false))
   }
+
+  useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current) }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
