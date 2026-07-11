@@ -261,7 +261,14 @@ async function fetchProductGroups(slug: string, presetHtml?: string): Promise<Pr
   }
 
   groups.sort((a, b) => a.bestPrice - b.bestPrice)
+  // groupKey cache — potrebné pre optimize (getKompasFromCache) a approval flow
+  for (const g of groups) _cache.set(g.groupKey, g)
   return groups
+}
+
+// Všetky produkty (klastre) jednej kategórie — na hľadanie alternatív toho istého druhu
+export async function getKompasCategoryGroups(slug: string): Promise<ProductGroup[]> {
+  return fetchProductGroups(slug)
 }
 
 // Session cache: groupKey → ProductGroup

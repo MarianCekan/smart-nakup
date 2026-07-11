@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { getCache, searchProducts, optimizeCart, COMPANY_NAMES } from '../services/cenysk.js'
 import { searchPriceo, getPriceoFromCache, ensurePriceoGroup } from '../services/priceo.js'
-import { searchKompas, getKompasFromCache, getKompasQueryCache } from '../services/kompas.js'
+import { searchKompas, getKompasFromCache, getKompasQueryCache, getKompasCategoryGroups } from '../services/kompas.js'
 
 export const router = Router()
 
@@ -158,6 +158,7 @@ router.post('/optimize', async (req, res) => {
     const allowedAll = [...allowedPriceo, ...allowedCenysk]
     const kompasStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
     const kompasUnmatched: string[] = []
+    const needsApproval: any[] = []
 
     // Vyrieš všetky items PARALELNE s dlhším timeoutom — studená cache cez jina relay
     // môže trvať >10s a sekvenčné čakanie by hádzalo falošné "Nenájdené"
@@ -180,7 +181,42 @@ router.post('/optimize', async (req, res) => {
         ? group.stores.filter((s: any) => allowedAll.includes(s.companyId))
         : group.stores
       ).sort((a: any, b: any) => a.price - b.price)
-      if (!eligible.length) { kompasUnmatched.push(item.query); continue }
+
+      if (!eligible.length) {
+        // Vybraný produkt nie je vo zvolených obchodoch — navrhni najlacnejšiu
+        // alternatívu z TEJ ISTEJ kategórie (napr. Clever cibuľa → Cibuľa žltá vo Fresh).
+        // User ju musí potvrdiť v ApprovalPanel-i.
+        const slug = group.groupKey.split(':')[1]
+        const siblings = slug ? await getKompasCategoryGroups(slug).catch(() => []) : []
+        let alt: { g: any; s: any } | null = null
+        for (const sib of siblings) {
+          if (sib.groupKey === group.groupKey) continue
+          for (const st of sib.stores) {
+            if (!allowedAll.includes(st.companyId)) continue
+            if (!alt || st.price < alt.s.price) alt = { g: sib, s: st }
+          }
+        }
+        if (alt) {
+          needsApproval.push({
+            originalQuery: item.query,
+            originalGroupKey: group.groupKey,
+            suggested: {
+              groupKey: alt.g.groupKey,
+              name: alt.g.name,
+              unit: alt.g.unit,
+              packageSize: alt.g.packageSize,
+              imageUrl: alt.s.imageUrl ?? alt.g.bestImageUrl,
+              price: alt.s.price,
+              unitPrice: alt.s.unitPrice,
+              storeName: alt.s.storeName,
+              isPromo: true,
+            },
+          })
+          continue
+        }
+        kompasUnmatched.push(item.query)
+        continue
+      }
 
       const chosen = eligible[0]
       console.log(`🛒 kompas optimize "${group.name}": chosen ${chosen.storeName}:${chosen.price}`)
@@ -204,7 +240,7 @@ router.post('/optimize', async (req, res) => {
       total_worst,
       total_saving: 0,
       unmatched: kompasUnmatched,
-      needsApproval: [],
+      needsApproval,
     })
   } catch (e: any) { res.status(502).json({ error: e.message }) }
 })
