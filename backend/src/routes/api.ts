@@ -130,8 +130,9 @@ router.post('/recipes/check', async (req, res) => {
   await Promise.all(ingredients.map(async q => {
     try {
       const hits = getKompasQueryCache(q) ?? await searchKompas(q, 3, 60000).catch(() => [])
-      // len skutočné name-matche — "cesnak" nesmie vrátiť "Syrovú nátierku" z kategórie cesnak
-      const strong = hits.find(h => ((h as any).matchScore ?? 0) >= 50)
+      // len PLNÉ name-matche (všetky slová dopytu v názve) — "paprika mletá" nesmie
+      // vrátiť "Biela paprika" (zelenina ≠ korenie), "kyslá kapusta" nie "Kapusta červená"
+      const strong = hits.find(h => ((h as any).matchScore ?? 0) >= 70)
       results[q] = strong ? toHit(strong, 'kompas') : null
     } catch { results[q] = null }
   }))
@@ -166,10 +167,10 @@ router.post('/optimize', async (req, res) => {
       let group = item.groupKey ? getKompasFromCache(item.groupKey) : undefined
       if (!group) {
         const results = await searchKompas(item.query, 5, 25000).catch(() => [])
-        // stale groupKey (reštart BE / zmenené kľúče) → fallback na najlepší NAME-match;
-        // kategóriové náhrady (score < 50) radšej ako "Nenájdené" neponúkame
+        // stale groupKey (reštart BE / zmenené kľúče) → fallback len na PLNÝ name-match
+        // (všetky slová dopytu v názve); čiastočné zhody radšej ako "Nenájdené" neponúkame
         group = (item.groupKey ? results.find(g => g.groupKey === item.groupKey) : undefined)
-          ?? results.find(g => ((g as any).matchScore ?? 0) >= 50)
+          ?? results.find(g => ((g as any).matchScore ?? 0) >= 70)
       }
       return { item, group }
     }))
