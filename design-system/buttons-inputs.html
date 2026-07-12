@@ -1,0 +1,21 @@
+<!-- @dsCard group="Komponenty" -->
+<!DOCTYPE html><html lang="sk"><head><meta charset="utf-8"><link rel="stylesheet" href="./tokens.css">
+<style>
+body{font-family:var(--font-family);background:var(--color-bg);padding:24px;margin:0;display:flex;flex-direction:column;gap:14px;max-width:420px}
+.btn-primary{padding:14px;font-size:var(--text-md);font-weight:700;background:var(--color-primary);color:#fff;border:none;border-radius:var(--radius-button);cursor:pointer;width:100%}
+.btn-primary:disabled{background:#cbd5e1;color:#fff}
+.btn-outline{padding:14px;font-size:var(--text-md);font-weight:700;background:var(--color-surface);color:var(--color-primary);border:2px solid var(--color-primary);border-radius:var(--radius-button);cursor:pointer;width:100%}
+.btn-back{background:var(--color-surface);border:2px solid var(--color-border);border-radius:var(--radius-input);padding:8px 14px;font-size:var(--text-sm);font-weight:600;color:var(--color-text-body);cursor:pointer;align-self:flex-start}
+.btn-danger{background:none;border:1px solid var(--color-error-border);border-radius:8px;padding:4px 10px;color:var(--color-error);font-size:var(--text-xs);font-weight:600;cursor:pointer;align-self:flex-start}
+.input{width:100%;padding:12px 14px;font-size:var(--text-md);border:2px solid var(--color-border);border-radius:var(--radius-input);outline:none;box-sizing:border-box;font-family:inherit}
+.input:focus{border-color:var(--color-primary-focus)}
+.add{width:52px;height:52px;background:var(--color-primary);color:#fff;font-size:22px;border:none;border-radius:var(--radius-button);cursor:pointer}
+</style></head><body>
+<button class="btn-primary">🔍 Vytvoriť nákupné zoznamy</button>
+<button class="btn-primary" disabled>🔍 Vytvoriť nákupné zoznamy (disabled)</button>
+<button class="btn-outline">💾 Uložiť nákupné zoznamy</button>
+<button class="btn-back">← Späť</button>
+<button class="btn-danger">Zmazať</button>
+<input class="input" placeholder="Napr. mlieko, vajcia, gouda...">
+<button class="add">+</button>
+</body></html>

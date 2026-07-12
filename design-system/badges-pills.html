@@ -1,0 +1,30 @@
+<!-- @dsCard group="Komponenty" -->
+<!DOCTYPE html><html lang="sk"><head><meta charset="utf-8"><link rel="stylesheet" href="./tokens.css">
+<style>
+body{font-family:var(--font-family);background:var(--color-bg);padding:24px;margin:0}
+h3{font-size:13px;color:var(--color-text-secondary);margin:16px 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{font-size:var(--text-2xs);font-weight:600;border-radius:var(--radius-pill);padding:2px 7px;white-space:nowrap}
+.promo{background:var(--color-promo-bg);color:var(--color-promo);border:1px solid var(--color-promo-border)}
+.upcoming{background:var(--color-upcoming-bg);color:var(--color-upcoming);border:1px solid var(--color-upcoming-border)}
+.store{font-size:var(--text-2xs);padding:2px 8px;border-radius:var(--radius-pill);font-weight:600}
+.saving{font-size:var(--text-2xs);color:var(--color-success);font-weight:600}
+.diff-plus{font-size:var(--text-2xs);color:var(--color-promo)}
+.diff-minus{font-size:var(--text-2xs);color:var(--color-success)}
+.ing{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-pill);font-size:var(--text-xs);font-weight:500}
+.ing.ok{background:var(--color-success-bg);color:var(--color-success-strong);border:1.5px solid var(--color-success-border)}
+.ing.no{background:#f8fafc;color:var(--color-text-muted);border:1.5px solid var(--color-border)}
+</style></head><body>
+<h3>Promo dátumy</h3>
+<div class="row"><span class="pill promo">8.7. – 14.7.</span><span class="pill upcoming">⚠ 13.7. – 19.7.</span></div>
+<h3>Obchodné badge (dropdown)</h3>
+<div class="row">
+  <span class="store" style="background:#0050AA18;color:var(--store-lidl)">Lidl +3</span>
+  <span class="store" style="background:#cc000018;color:var(--store-kaufland)">Kaufland</span>
+  <span class="store" style="background:#FFC72C18;color:#b45309">Billa</span>
+</div>
+<h3>Úspora a porovnanie cien</h3>
+<div class="row"><span class="saving">ušetríš 0.47 € vs Billa</span><span class="diff-plus">Billa +0.10€</span><span class="diff-minus">Lidl −0.03€</span></div>
+<h3>Suroviny receptu</h3>
+<div class="row"><span class="ing ok">🏷️ mrkva <b>0.99 €</b></span><span class="ing no">➖ cesnak</span></div>
+</body></html>

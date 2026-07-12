@@ -1,0 +1,66 @@
+<!-- @dsCard group="Komponenty" -->
+<!DOCTYPE html><html lang="sk"><head><meta charset="utf-8"><link rel="stylesheet" href="./tokens.css">
+<style>
+body{font-family:var(--font-family);background:var(--color-bg);padding:24px;margin:0;display:flex;flex-direction:column;gap:16px;max-width:560px}
+h3{font-size:13px;color:var(--color-text-secondary);margin:4px 0 -6px}
+/* Result card — zoznam pre jeden obchod */
+.result{border-radius:var(--radius-panel);overflow:hidden;border:2px solid #0050AA22;background:var(--color-surface);box-shadow:var(--shadow-panel)}
+.result-head{background:var(--store-lidl);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;color:#fff;font-weight:800}
+.result-head .sum{font-size:var(--text-2xl)}
+.result-body{padding:10px 14px}
+.item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-row);background:var(--store-lidl-bg)}
+.thumb{width:36px;height:36px;border-radius:8px;background:#fff;border:1px solid var(--color-border)}
+.item-name{font-weight:500;font-size:14px}
+.item-sub{font-size:var(--text-xs);color:var(--color-text-secondary)}
+.item-right{margin-left:auto;text-align:right}
+.item-price{font-weight:800;color:var(--store-lidl);font-size:var(--text-lg)}
+.saving{font-size:var(--text-2xs);color:var(--color-success);font-weight:600}
+.pill{font-size:var(--text-2xs);font-weight:600;border-radius:var(--radius-pill);padding:2px 7px;background:var(--color-promo-bg);color:var(--color-promo);border:1px solid var(--color-promo-border)}
+/* Dropdown návrh */
+.suggest{background:var(--color-surface);border:2px solid var(--color-primary-focus);border-radius:14px;padding:6px;box-shadow:var(--shadow-dropdown)}
+.srow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-row)}
+.srow.active{background:var(--color-primary-bg)}
+.sbadge{margin-left:auto;font-size:var(--text-2xs);padding:2px 8px;border-radius:var(--radius-pill);background:#0050AA18;color:var(--store-lidl);font-weight:600}
+/* Chip položky v košíku */
+.chip{display:flex;align-items:center;gap:10px;background:var(--color-primary-bg);border-radius:var(--radius-input);padding:10px 14px;color:var(--color-primary);font-weight:500}
+.chip .x{margin-left:auto;color:var(--color-text-muted);cursor:pointer}
+/* Celková úspora */
+.total-saving{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid var(--color-success-border);border-radius:14px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+</style></head><body>
+<h3>Result card (zoznam pre obchod)</h3>
+<div class="result">
+  <div class="result-head"><span>Lidl</span><span class="sum">2.48 €</span></div>
+  <div class="result-body">
+    <div class="item">
+      <div class="thumb"></div>
+      <div><div class="item-name">mlieko</div><div class="item-sub">Trvanlivé mlieko 1,5 % · 1l</div></div>
+      <div class="item-right">
+        <div class="item-price">0.42 €</div>
+        <div class="saving">ušetríš 0.47 € vs Billa</div>
+        <span class="pill">8.7. – 14.7.</span>
+      </div>
+    </div>
+  </div>
+</div>
+<h3>Dropdown vyhľadávania</h3>
+<div class="suggest">
+  <div class="srow active">
+    <div class="thumb"></div>
+    <div><div class="item-name">Clever cibuľa</div><div class="item-sub">od <b style="color:var(--color-success)">0.59 €</b> <span class="pill">8.7. – 14.7.</span></div></div>
+    <span class="sbadge">Billa</span>
+  </div>
+  <div class="srow">
+    <div class="thumb"></div>
+    <div><div class="item-name">Cibuľa žltá</div><div class="item-sub">od <b style="color:var(--color-success)">0.69 €</b></div></div>
+    <span class="sbadge" style="background:#5aaa3c18;color:var(--store-fresh)">Fresh</span>
+  </div>
+</div>
+<h3>Chip v košíku</h3>
+<div class="chip"><div class="thumb" style="width:28px;height:28px"></div> Clever cibuľa <span class="x">×</span></div>
+<h3>Banner celkovej úspory</h3>
+<div class="total-saving">
+  <div><div style="font-weight:700;color:var(--color-success-strong)">🎉 Celková úspora</div>
+  <div style="font-size:var(--text-xs);color:var(--color-success)">oproti najdrahšiemu obchodu pre každú položku</div></div>
+  <div style="font-size:30px;font-weight:900;color:var(--color-success-strong)">2.34 €</div>
+</div>
+</body></html>

@@ -1,0 +1,80 @@
+/* SmartNákup — dizajnové tokeny (extrahované z App.tsx) */
+:root {
+  /* Typografia */
+  --font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --text-3xl: 24px;   /* H1 obrazovky */
+  --text-2xl: 22px;   /* suma v hlavičke karty */
+  --text-lg: 17px;    /* cena položky */
+  --text-md: 15px;    /* body / tlačidlá */
+  --text-sm: 13px;    /* sekundárny text */
+  --text-xs: 12px;    /* meta text */
+  --text-2xs: 11px;   /* pills, badge */
+
+  /* Farby — základ */
+  --color-bg: #f1f5f9;            /* pozadie appky */
+  --color-surface: #ffffff;       /* karty */
+  --color-text: #0f172a;          /* nadpisy */
+  --color-text-strong: #1e293b;   /* ceny, dôraz */
+  --color-text-body: #475569;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+
+  /* Primárna (akcie, CTA) */
+  --color-primary: #2563eb;
+  --color-primary-focus: #3b82f6;   /* border aktívneho inputu/dropdownu */
+  --color-primary-bg: #eff6ff;      /* hover/selected riadok, aktívne menu */
+
+  /* Úspora / úspech */
+  --color-success: #16a34a;
+  --color-success-strong: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-success-bg-soft: #f0fdf4;
+  --color-success-border: #86efac;
+
+  /* Akcia beží (promo) */
+  --color-promo: #dc2626;
+  --color-promo-bg: #fef2f2;
+  --color-promo-border: #fca5a5;
+
+  /* Akcia ešte len začne (upcoming) */
+  --color-upcoming: #b45309;
+  --color-upcoming-bg: #fffbeb;
+  --color-upcoming-border: #fcd34d;
+
+  /* Varovanie (nenájdené položky) */
+  --color-warn-text: #92400e;
+  --color-warn-bg: #fffbeb;
+  --color-warn-border: #fde68a;
+
+  /* Chyba */
+  --color-error: #ef4444;
+  --color-error-border: #fca5a5;
+
+  /* Obchody */
+  --store-lidl: #0050AA;      --store-lidl-bg: #e8f0fb;
+  --store-kaufland: #cc0000;  --store-kaufland-bg: #fde8e8;
+  --store-tesco: #003DA5;     --store-tesco-bg: #e8edf8;
+  --store-billa: #FFC72C;     --store-billa-bg: #fff8e1;  --store-billa-text: #1a1a1a;
+  --store-terno: #ff6600;     --store-terno-bg: #fff3e0;
+  --store-fresh: #5aaa3c;     --store-fresh-bg: #edf7e8;
+
+  /* Radiusy */
+  --radius-card: 18px;      /* veľké karty/sekcie */
+  --radius-panel: 16px;     /* result card */
+  --radius-button: 12px;    /* CTA tlačidlá */
+  --radius-input: 10px;     /* inputy, malé tlačidlá */
+  --radius-row: 9px;        /* riadky v zoznamoch */
+  --radius-pill: 20px;      /* badge, pills */
+
+  /* Tiene */
+  --shadow-card: 0 1px 6px rgba(0,0,0,0.07);
+  --shadow-panel: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-dropdown: 0 8px 32px rgba(0,0,0,0.13);
+  --shadow-tooltip: 0 4px 12px rgba(0,0,0,0.25);
+
+  /* Medzery */
+  --space-card-padding: 20px;
+  --space-row-gap: 10px;
+  --space-section-gap: 12px;
+}
