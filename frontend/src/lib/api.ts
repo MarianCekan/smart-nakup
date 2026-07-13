@@ -95,6 +95,7 @@ export const api = {
   saveList: (name: string, stores: OptimizeResult['stores'], unmatched: string[]) =>
     fetchJson<SavedListDto>('/lists', { method: 'POST', body: JSON.stringify({ name, stores, unmatched }) }),
   deleteList: (id: string) => fetchJson<{ ok: boolean }>(`/lists/${id}`, { method: 'DELETE' }),
+  renameList: (id: string, name: string) => fetchJson<{ ok: boolean; name: string }>(`/lists/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   stores: () => fetchJson<Store[]>('/stores'),
   search: (q: string) => fetchJson<ProductHit[]>(`/products/search?q=${encodeURIComponent(q)}`),
   status: () => fetchJson<{ ok: boolean; rawProducts: number; groups: number; ageMinutes: number }>('/status'),

@@ -541,12 +541,22 @@ function ApprovalPanel({
 }
 
 // ─── SavedListCard ────────────────────────────────────────────────────────────
-function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => void }) {
+function SavedListCard({ list, onDelete, onRename }: { list: SavedList; onDelete: () => void; onRename: (name: string) => void }) {
   const { t } = useT()
   // checked: Set of "companyId:query" keys
   const [checked, setChecked] = useState<Set<string>>(new Set())
   // Explicitný open/close zámer používateľa (má prednosť pred auto-collapse). undefined = auto
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({})
+  // Inline premenovanie názvu zoznamu
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(list.name)
+
+  const commitRename = () => {
+    setEditing(false)
+    const next = draft.trim()
+    if (next && next !== list.name) onRename(next)
+    else setDraft(list.name)
+  }
 
   const toggleItem = (companyId: string, query: string) => {
     const key = `${companyId}:${query}`
@@ -579,10 +589,27 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
       borderRadius: 18, padding: 16, boxShadow: t.shadowCard, transition: 'background 0.2s', fontFamily: t.font,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 15, color: allDone ? t.doneText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{list.name}</span>
-            {allDone && <span style={{ fontSize: 11, fontWeight: 700, color: t.accentSoftText, background: t.accentSoftBg, padding: '2px 9px', borderRadius: 999 }}>Hotové</span>}
+            {editing ? (
+              <input
+                autoFocus value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setDraft(list.name); setEditing(false) } }}
+                style={{
+                  fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em',
+                  background: t.surface2, border: `1px solid ${t.accent}`, borderRadius: 8, padding: '3px 8px',
+                  outline: 'none', width: '100%', maxWidth: 240,
+                }}
+              />
+            ) : (
+              <span onClick={() => { setDraft(list.name); setEditing(true) }} title="Kliknutím premenuješ"
+                style={{ fontWeight: 700, fontSize: 15, color: allDone ? t.doneText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em', cursor: 'pointer' }}>
+                {list.name}
+              </span>
+            )}
+            {allDone && !editing && <span style={{ fontSize: 11, fontWeight: 700, color: t.accentSoftText, background: t.accentSoftBg, padding: '2px 9px', borderRadius: 999, flexShrink: 0 }}>Hotové</span>}
           </div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{new Date(list.savedAt).toLocaleString('sk-SK')}</div>
         </div>
@@ -660,6 +687,9 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
   const [lists, setLists] = useState<SavedList[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Vždy zoradené od najnovšieho po najstaršie podľa dátumu vytvorenia
+  const byDateDesc = (arr: SavedList[]) => [...arr].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+
   useEffect(() => {
     api.getLists()
       .then(dbLists => {
@@ -669,19 +699,24 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
           Promise.all(local.map(l => api.saveList(l.name, l.stores, l.unmatched).catch(() => null)))
             .then(saved => {
               localStorage.removeItem('smartnakup_lists')
-              setLists([...saved.filter((s): s is NonNullable<typeof s> => s !== null), ...dbLists])
+              setLists(byDateDesc([...saved.filter((s): s is NonNullable<typeof s> => s !== null), ...dbLists]))
             })
         } else {
-          setLists(dbLists)
+          setLists(byDateDesc(dbLists))
         }
       })
-      .catch(() => setLists(loadSavedLists()))  // offline/neprihlásený fallback
+      .catch(() => setLists(byDateDesc(loadSavedLists())))  // offline/neprihlásený fallback
       .finally(() => setLoading(false))
   }, [])
 
   const deleteList = (id: string) => {
     setLists(prev => prev.filter(l => l.id !== id))
     api.deleteList(id).catch(() => {})
+  }
+
+  const renameList = (id: string, name: string) => {
+    setLists(prev => prev.map(l => l.id === id ? { ...l, name } : l))
+    api.renameList(id, name).catch(() => {})
   }
 
   return (
@@ -702,7 +737,7 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {lists.map(list => (
-              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} />
+              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} onRename={name => renameList(list.id, name)} />
             ))}
           </div>
         )}
@@ -910,6 +945,42 @@ const RECIPES: Recipe[] = [
     time: '30 min',
     ingredients: ['ryža', 'šampiňóny', 'maslo', 'cibuľa', 'cesnak', 'smotana na varenie'],
   },
+  {
+    id: 'vajcia-zemiaky',
+    name: 'Zemiaky s praženicou',
+    time: '25 min',
+    ingredients: ['zemiaky', 'vajcia', 'cibuľa', 'slanina', 'maslo'],
+  },
+  {
+    id: 'tunak-cestoviny',
+    name: 'Cestoviny s tuniakom',
+    time: '20 min',
+    ingredients: ['cestoviny', 'tuniak', 'paradajková omáčka', 'cibuľa', 'cesnak', 'syr'],
+  },
+  {
+    id: 'kuracie-ryza',
+    name: 'Kuracie so zeleninou a ryžou',
+    time: '30 min',
+    ingredients: ['kuracie prsia', 'ryža', 'mrkva', 'hrášok', 'cibuľa', 'sójová omáčka'],
+  },
+  {
+    id: 'gulas',
+    name: 'Bravčový guláš',
+    time: '70 min',
+    ingredients: ['bravčové mäso', 'cibuľa', 'zemiaky', 'paprika mletá', 'paprika', 'cesnak'],
+  },
+  {
+    id: 'palacinky',
+    name: 'Palacinky',
+    time: '25 min',
+    ingredients: ['múka', 'mlieko', 'vajcia', 'cukor', 'džem'],
+  },
+  {
+    id: 'francuzske-zemiaky',
+    name: 'Francúzske zemiaky',
+    time: '55 min',
+    ingredients: ['zemiaky', 'vajcia', 'klobása', 'cibuľa', 'kyslá smotana', 'syr'],
+  },
 ]
 
 function RecipesScreen({ onBack, onAddToCart }: {
@@ -919,6 +990,13 @@ function RecipesScreen({ onBack, onAddToCart }: {
   const { t } = useT()
   const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggleRecipe = (id: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -969,18 +1047,20 @@ function RecipesScreen({ onBack, onAddToCart }: {
         {hits && RECIPES.map(recipe => {
           const onSale = recipe.ingredients.filter(i => hits[i])
           const salePrice = onSale.reduce((s, i) => s + (hits[i]?.bestPrice ?? 0), 0)
+          const open = expanded.has(recipe.id)
 
           return (
             <div key={recipe.id} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: t.shadowCard }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div onClick={() => toggleRecipe(recipe.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none' }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 14, background: t.accentSoftBg, color: t.accentSoftText,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}><CookingPot size={23} strokeWidth={2} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 17, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{recipe.name}</div>
-                  <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Clock size={12} strokeWidth={2.2} /> {recipe.time}
+                  <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={12} strokeWidth={2.2} /> {recipe.time}</span>
+                    <span>· {onSale.length}/{recipe.ingredients.length} v akcii</span>
                   </div>
                 </div>
                 {salePrice > 0 && (
@@ -989,46 +1069,51 @@ function RecipesScreen({ onBack, onAddToCart }: {
                     <div style={{ fontSize: 20, fontWeight: 800, color: t.accentInk, fontFamily: t.fontHead }}>~{salePrice.toFixed(2)} €</div>
                   </div>
                 )}
+                <span style={{ color: t.textMuted, display: 'flex', flexShrink: 0 }}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
               </div>
 
-              {/* Suroviny — zoznam so zarovnanými cenami */}
-              <div style={{ border: `1px solid ${t.hairline}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-                {recipe.ingredients.map((ing, idx) => {
-                  const hit = hits[ing]
-                  return (
-                    <div key={ing} style={{
-                      display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
-                      borderBottom: idx < recipe.ingredients.length - 1 ? `1px solid ${t.hairline}` : 'none',
-                    }}>
-                      {hit
-                        ? <Check size={15} strokeWidth={2.6} color={t.accent} style={{ flexShrink: 0 }} />
-                        : <Minus size={15} strokeWidth={2.2} color={t.textFaint} style={{ flexShrink: 0 }} />}
-                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: hit ? t.text : t.textMuted }}>{ing}</span>
-                      {hit
-                        ? <span style={{ fontSize: 13.5, fontWeight: 700, color: t.accentInk }}>{hit.bestPrice.toFixed(2)} €</span>
-                        : <span style={{ fontSize: 12.5, fontWeight: 500, color: t.textFaint }}>nie v akcii</span>}
-                    </div>
-                  )
-                })}
-              </div>
+              {open && (
+                <>
+                  {/* Suroviny — zoznam so zarovnanými cenami */}
+                  <div style={{ border: `1px solid ${t.hairline}`, borderRadius: 12, overflow: 'hidden', margin: '14px 0' }}>
+                    {recipe.ingredients.map((ing, idx) => {
+                      const hit = hits[ing]
+                      return (
+                        <div key={ing} style={{
+                          display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
+                          borderBottom: idx < recipe.ingredients.length - 1 ? `1px solid ${t.hairline}` : 'none',
+                        }}>
+                          {hit
+                            ? <Check size={15} strokeWidth={2.6} color={t.accent} style={{ flexShrink: 0 }} />
+                            : <Minus size={15} strokeWidth={2.2} color={t.textFaint} style={{ flexShrink: 0 }} />}
+                          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: hit ? t.text : t.textMuted }}>{ing}</span>
+                          {hit
+                            ? <span style={{ fontSize: 13.5, fontWeight: 700, color: t.accentInk }}>{hit.bestPrice.toFixed(2)} €</span>
+                            : <span style={{ fontSize: 12.5, fontWeight: 500, color: t.textFaint }}>nie v akcii</span>}
+                        </div>
+                      )
+                    })}
+                  </div>
 
-              <button
-                onClick={() => {
-                  const items = recipe.ingredients.map(ing => {
-                    const hit = hits[ing]
-                    return { query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl }
-                  })
-                  onAddToCart(items)
-                  onBack()
-                }}
-                style={{
-                  width: '100%', padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead,
-                  background: t.accent, color: t.accentOn, border: 'none',
-                  borderRadius: 12, cursor: 'pointer',
-                }}
-              >
-                Pridať suroviny do zoznamu
-              </button>
+                  <button
+                    onClick={() => {
+                      const items = recipe.ingredients.map(ing => {
+                        const hit = hits[ing]
+                        return { query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl }
+                      })
+                      onAddToCart(items)
+                      onBack()
+                    }}
+                    style={{
+                      width: '100%', padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead,
+                      background: t.accent, color: t.accentOn, border: 'none',
+                      borderRadius: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Pridať suroviny do zoznamu
+                  </button>
+                </>
+              )}
             </div>
           )
         })}

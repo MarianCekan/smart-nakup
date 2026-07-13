@@ -70,6 +70,23 @@ listsRouter.post('/', async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }) }
 })
 
+// PATCH /api/v1/lists/:id — premenuj zoznam (len vlastný)
+listsRouter.patch('/:id', async (req, res) => {
+  const userId = await getUserId(req)
+  if (!userId) return res.status(401).json({ error: 'Neprihlásený' })
+  const { name } = req.body ?? {}
+  if (!name || typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Chýba name' })
+  try {
+    await ensureTable()
+    const { rowCount } = await pool.query(
+      `UPDATE shopping_lists SET name = $1 WHERE id = $2 AND user_id = $3`,
+      [name.trim().slice(0, 200), req.params.id, userId],
+    )
+    if (!rowCount) return res.status(404).json({ error: 'Zoznam neexistuje' })
+    res.json({ ok: true, name: name.trim().slice(0, 200) })
+  } catch (e: any) { res.status(500).json({ error: e.message }) }
+})
+
 // DELETE /api/v1/lists/:id — zmaž zoznam (len vlastný)
 listsRouter.delete('/:id', async (req, res) => {
   const userId = await getUserId(req)
