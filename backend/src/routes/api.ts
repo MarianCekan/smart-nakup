@@ -6,11 +6,6 @@ import { searchKompas, getKompasFromCache, getKompasQueryCache, getKompasCategor
 
 export const router = Router()
 
-// CompanyIds pokryté priceo.sk (Tesco, Kaufland, Lidl)
-const PRICEO_COMPANY_IDS = new Set(['31321828', '35790164', '35793783'])
-// CompanyIds len v cenyslovensko (Terno, Billa, Fresh)
-const CENYSK_ONLY_IDS = new Set(['50020188', '36183181', '36644871', '31347037', '36483492'])
-
 router.get('/status', async (_req, res) => {
   try {
     const cache = await getCache()
@@ -22,12 +17,14 @@ router.get('/status', async (_req, res) => {
 
 // Hardcoded store list — no external API needed
 const STORES = [
-  { name: 'Billa',     companyIds: ['31347037'] },
-  { name: 'Fresh',     companyIds: ['36644871'] },
-  { name: 'Kaufland',  companyIds: ['35790164'] },
-  { name: 'Lidl',      companyIds: ['35793783'] },
-  { name: 'Terno',     companyIds: ['36183181'] },
-  { name: 'Tesco',     companyIds: ['31321828'] },
+  { name: 'Billa',        companyIds: ['31347037'] },
+  { name: 'COOP Jednota', companyIds: ['coop-jednota'] },
+  { name: 'Fresh',        companyIds: ['36644871'] },
+  { name: 'Kaufland',     companyIds: ['35790164'] },
+  { name: 'Klas',         companyIds: ['klas'] },
+  { name: 'Lidl',         companyIds: ['35793783'] },
+  { name: 'Terno',        companyIds: ['36183181'] },
+  { name: 'Tesco',        companyIds: ['31321828'] },
 ]
 
 router.get('/stores', (_req, res) => {
@@ -149,14 +146,12 @@ router.post('/optimize', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
   const { items, company_ids } = parsed.data
-  const allowedPriceo = company_ids.filter(id => PRICEO_COMPANY_IDS.has(id))
-  const allowedCenysk = company_ids.filter(id => CENYSK_ONLY_IDS.has(id))
 
   console.log(`📦 optimize items: ${items.map(i => `${i.query}[${i.groupKey ?? 'no-key'}]`).join(', ')}`)
 
   try {
-    // LEN KOMPAS — všetky items cez kompas
-    const allowedAll = [...allowedPriceo, ...allowedCenysk]
+    // LEN KOMPAS — filtrujeme priamo podľa zvolených company_ids (prázdne = všetky obchody)
+    const allowedAll = company_ids
     const kompasStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
     const kompasUnmatched: string[] = []
     const needsApproval: any[] = []

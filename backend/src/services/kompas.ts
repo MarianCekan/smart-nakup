@@ -26,6 +26,8 @@ const STORE_MAP: Record<string, { companyId: string; storeName: string }> = {
   'billa':       { companyId: '31347037', storeName: 'Billa' },
   'terno':       { companyId: '36183181', storeName: 'Terno' },
   'fresh':       { companyId: '36644871', storeName: 'Fresh' },
+  'coop':        { companyId: 'coop-jednota', storeName: 'COOP Jednota' },
+  'klas':        { companyId: 'klas',         storeName: 'Klas' },
 }
 
 function matchStore(name: string): { companyId: string; storeName: string } | null {

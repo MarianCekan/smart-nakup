@@ -12,12 +12,15 @@ export const STORE_BRAND: Record<string, { main: string; tint: string; text?: st
   'Billa':    { main: '#FFC72C', tint: '#fff8e1', text: '#1a1a1a', abbr: 'B' },
   'Terno':    { main: '#ff6600', tint: '#fff3e0', abbr: 'Tn' },
   'Fresh':    { main: '#5aaa3c', tint: '#edf7e8', abbr: 'F' },
+  'COOP Jednota': { main: '#e2001a', tint: '#fde8ea', abbr: 'CJ' },
+  'Klas':         { main: '#2f8f4e', tint: '#e8f5ec', abbr: 'Kl' },
 }
 
 // Zosvetlené brandové farby pre text/rámiky na tmavom podklade
 const STORE_LIGHTENED: Record<string, string> = {
   'Lidl': '#5b9be8', 'Kaufland': '#ff5a5a', 'Tesco': '#5b8ff0',
   'Billa': '#ffd54a', 'Terno': '#ff9a4d', 'Fresh': '#7ecb5a',
+  'COOP Jednota': '#ff5a5a', 'Klas': '#5cc47a',
 }
 
 export type Theme = {
