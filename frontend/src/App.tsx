@@ -43,21 +43,21 @@ function PromoBadge({ from, until }: { from?: string | null; until?: string | nu
   )
 }
 
-const STORE_LOGO_EXT: Record<string, string> = {
-  'Lidl': 'png', 'Kaufland': 'png', 'Billa': 'png', 'Terno': 'png',
-  'Tesco': 'png', 'Fresh': 'png',
+const STORE_LOGO_FILE: Record<string, string> = {
+  'Lidl': 'lidl.png', 'Kaufland': 'kaufland.png', 'Billa': 'billa.png', 'Terno': 'terno.png',
+  'Tesco': 'tesco.png', 'Fresh': 'fresh.png', 'COOP Jednota': 'coop.svg', 'Klas': 'klas.svg',
 }
 
-// Lettermark — kruh s brandovou farbou + skratka (fallback keď PNG chýba)
+// Lettermark — kruh s brandovou farbou + skratka (fallback keď logo chýba)
 function StoreLogo({ name, size = 22, muted = false }: { name: string; size?: number; muted?: boolean }) {
   const b = storeBrand(name)
-  const ext = STORE_LOGO_EXT[name]
+  const file = STORE_LOGO_FILE[name]
   const [imgFailed, setImgFailed] = useState(false)
 
-  if (ext && !imgFailed) {
+  if (file && !imgFailed) {
     return (
       <img
-        src={`/stores/${name.toLowerCase()}.${ext}`}
+        src={`/stores/${file}`}
         alt={name}
         style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0, borderRadius: 3, opacity: muted ? 0.45 : 1, filter: muted ? 'grayscale(1)' : 'none' }}
         onError={() => setImgFailed(true)}
