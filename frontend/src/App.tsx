@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
 import {
-  Search, Plus, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus,
+  Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
 } from 'lucide-react'
 import { api, Store, ProductHit, OptimizeResult, NeedsApproval } from './lib/api'
@@ -236,8 +236,8 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
+      <div>
+        <div style={{ position: 'relative' }}>
           <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: t.textFaint, pointerEvents: 'none' }} />
           <input
             ref={inputRef} value={value}
@@ -264,12 +264,6 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
             width: 8, height: 8, borderRadius: '50%', background: t.accent, animation: 'pulse 1.2s infinite',
           }} />}
         </div>
-        <button onClick={() => value.trim() && commit({ query: value.trim(), displayName: value.trim() })}
-          style={{
-            width: 48, height: 48, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 14,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            boxShadow: t.shadowCta,
-          }}><Plus size={22} strokeWidth={2.6} /></button>
       </div>
 
       {(open && suggestions.length > 0) || (loading && debouncedQ.length >= 2) || (retrying && debouncedQ.length >= 2) ? (
