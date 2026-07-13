@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
+import {
+  Search, Plus, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus,
+  ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
+} from 'lucide-react'
 import { api, Store, ProductHit, OptimizeResult, NeedsApproval } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
 import { authClient } from './lib/authClient'
+import { Theme, ThemeMode, useThemeMode, storeBrand, storeInk } from './theme'
 
-const COLORS: Record<string, { main: string; bg: string; text?: string; abbr: string }> = {
-  'Lidl':     { main: '#0050AA', bg: '#e8f0fb', abbr: 'L' },
-  'Kaufland': { main: '#cc0000', bg: '#fde8e8', abbr: 'K' },
-  'Tesco':    { main: '#003DA5', bg: '#e8edf8', abbr: 'T' },
-  'Billa':    { main: '#FFC72C', bg: '#fff8e1', text: '#1a1a1a', abbr: 'B' },
-  'Terno':    { main: '#ff6600', bg: '#fff3e0', abbr: 'Tn' },
-  'Fresh':    { main: '#5aaa3c', bg: '#edf7e8', abbr: 'F' },
-}
-function col(name: string) { return COLORS[name] ?? { main: '#475569', bg: '#f8fafc', abbr: name[0] ?? '?' } }
+// ─── Theme context ────────────────────────────────────────────────────────────
+const ThemeCtx = createContext<{ t: Theme; mode: ThemeMode; setMode: (m: ThemeMode) => void }>(null as any)
+const useT = () => useContext(ThemeCtx)
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso: string): string {
   const [, m, d] = iso.split('-')
   return `${parseInt(d)}.${parseInt(m)}.`
@@ -25,16 +25,18 @@ function promoDateLabel(from?: string | null, until?: string | null): { text: st
   if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
   return null
 }
+
 function PromoBadge({ from, until }: { from?: string | null; until?: string | null }) {
+  const { t } = useT()
   const d = promoDateLabel(from, until)
   if (!d) return null
   return (
     <span style={{
-      fontSize: 11, fontWeight: 600,
-      background: d.upcoming ? '#fffbeb' : '#fef2f2',
-      color: d.upcoming ? '#b45309' : '#dc2626',
-      border: `1px solid ${d.upcoming ? '#fcd34d' : '#fca5a5'}`,
-      borderRadius: 20, padding: '2px 7px', whiteSpace: 'nowrap',
+      fontSize: 11, fontWeight: 600, fontFamily: t.font,
+      background: d.upcoming ? t.upcomingBg : t.promoBg,
+      color: d.upcoming ? t.upcomingText : t.promoText,
+      border: `1px solid ${d.upcoming ? t.upcomingBorder : t.promoBorder}`,
+      borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
     }}>
       {d.upcoming ? '⚠ ' : ''}{d.text}
     </span>
@@ -46,8 +48,9 @@ const STORE_LOGO_EXT: Record<string, string> = {
   'Tesco': 'png', 'Fresh': 'png',
 }
 
-function StoreLogo({ name, size = 22 }: { name: string; size?: number }) {
-  const c = col(name)
+// Lettermark — kruh s brandovou farbou + skratka (fallback keď PNG chýba)
+function StoreLogo({ name, size = 22, muted = false }: { name: string; size?: number; muted?: boolean }) {
+  const b = storeBrand(name)
   const ext = STORE_LOGO_EXT[name]
   const [imgFailed, setImgFailed] = useState(false)
 
@@ -56,7 +59,7 @@ function StoreLogo({ name, size = 22 }: { name: string; size?: number }) {
       <img
         src={`/stores/${name.toLowerCase()}.${ext}`}
         alt={name}
-        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0, borderRadius: 3 }}
+        style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0, borderRadius: 3, opacity: muted ? 0.45 : 1, filter: muted ? 'grayscale(1)' : 'none' }}
         onError={() => setImgFailed(true)}
       />
     )
@@ -66,24 +69,44 @@ function StoreLogo({ name, size = 22 }: { name: string; size?: number }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       width: size, height: size, borderRadius: '50%',
-      background: c.text ? c.main : '#ffffff33',
-      color: c.text ?? '#fff',
-      fontWeight: 800, fontSize: size * 0.45, flexShrink: 0,
-      border: c.text ? `1.5px solid ${c.main}` : 'none',
-    }}>{c.abbr}</span>
+      background: muted ? '#8fa09355' : b.main,
+      color: b.text ?? '#fff',
+      fontWeight: 800, fontSize: size * 0.42, flexShrink: 0, fontFamily: "'Sora', sans-serif",
+    }}>{b.abbr}</span>
   )
 }
 
-function ProductImg({ src, size = 36 }: { src: string | null | undefined; size?: number }) {
+function ProductImg({ src, size = 36, radius = 11 }: { src: string | null | undefined; size?: number; radius?: number }) {
+  const { t } = useT()
   const [failed, setFailed] = useState(false)
+  const base = { width: size, height: size, objectFit: 'contain' as const, borderRadius: radius, flexShrink: 0, background: t.surface2 }
   if (src && !failed) {
-    return (
-      <img src={src} alt="" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 6, flexShrink: 0, border: '1px solid #f0f0f0' }}
-        onError={() => setFailed(true)} />
-    )
+    return <img src={src} alt="" style={{ ...base, border: `1px solid ${t.hairline}` }} onError={() => setFailed(true)} />
   }
+  return <img src="/stores/food-placeholder.svg" alt="" style={{ ...base, opacity: 0.4, padding: 4 }} />
+}
+
+// Sekčný nadpis: 11/700 UPPERCASE
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  const { t } = useT()
   return (
-    <img src="/stores/food-placeholder.svg" alt="" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 6, flexShrink: 0, opacity: 0.5 }} />
+    <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12, fontFamily: t.font }}>
+      {children}
+    </div>
+  )
+}
+
+// Hlavička obrazovky: back tlačidlo 40×40 + H1
+function ScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  const { t } = useT()
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+      <button onClick={onBack} style={{
+        width: 40, height: 40, borderRadius: 12, background: t.surface, border: `1px solid ${t.border}`,
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textSec, flexShrink: 0,
+      }}><ChevronLeft size={20} /></button>
+      <h1 style={{ margin: 0, fontSize: 23, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{title}</h1>
+    </div>
   )
 }
 
@@ -106,21 +129,17 @@ function loadSavedLists(): SavedList[] {
 }
 
 const LOADING_PHRASES = [
-  '🕵️ Prehľadávam letáky…',
-  '🥕 Hľadám najlepšiu mrkvu…',
-  '💸 Porovnávam ceny…',
-  '🛒 Prechádzam regály…',
-  '🔍 Lustrujem obchody…',
-  '📦 Otváram škatule…',
-  '🧾 Čítam letáky po jednom…',
-  '🤑 Hľadám kde ušetríš…',
-  '🐌 Kompas je trochu pomalý, sorry…',
-  '☕ Mohol by si si uvariť kávu…',
-  '🎯 Takmer tam…',
+  'Prehľadávam letáky…',
+  'Porovnávam ceny…',
+  'Hľadám kde ušetríš…',
+  'Prechádzam akcie obchodov…',
+  'Kompas býva pomalší, chvíľku…',
+  'Takmer tam…',
 ]
 
 // ─── TypeaheadInput ───────────────────────────────────────────────────────────
 function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
+  const { t } = useT()
   const [value, setValue] = useState('')
   const [suggestions, setSuggestions] = useState<ProductHit[]>([])
   const [open, setOpen] = useState(false)
@@ -149,12 +168,12 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
     }
   }, [])
 
-  // Cyklovanie vtipných fráz počas loading-u
+  // Cyklovanie fráz počas loading-u
   useEffect(() => {
     if (!loading) return
     setPhraseIdx(0)
-    const t = setInterval(() => setPhraseIdx(i => (i + 1) % LOADING_PHRASES.length), 1800)
-    return () => clearInterval(t)
+    const t2 = setInterval(() => setPhraseIdx(i => (i + 1) % LOADING_PHRASES.length), 1800)
+    return () => clearInterval(t2)
   }, [loading])
 
   useEffect(() => {
@@ -219,6 +238,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
     <div ref={containerRef} style={{ position: 'relative' }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: t.textFaint, pointerEvents: 'none' }} />
           <input
             ref={inputRef} value={value}
             onChange={e => setValue(e.target.value)}
@@ -227,21 +247,29 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
               if (suggestions.length > 0) setOpen(true)
               setTimeout(() => inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300)
             }}
-            placeholder="Napr. mlieko, vajcia, gouda..."
+            placeholder="Napr. mlieko, vajcia, gouda…"
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
             enterKeyHint="search"
             style={{
-              width: '100%', padding: '13px 40px 13px 16px', fontSize: 16,
-              border: '2px solid #e2e8f0', borderRadius: 12, outline: 'none',
-              fontFamily: 'inherit', boxSizing: 'border-box', color: '#1a202c',
+              width: '100%', padding: '13px 14px 13px 42px', fontSize: 16,
+              border: `1px solid ${t.border}`, borderRadius: 14, outline: 'none',
+              fontFamily: t.font, boxSizing: 'border-box', color: t.text, background: t.inputBg,
+              transition: 'border-color 0.15s',
             }}
-            onFocusCapture={e => e.currentTarget.style.borderColor = '#3b82f6'}
-            onBlurCapture={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+            onFocusCapture={e => e.currentTarget.style.borderColor = t.accent}
+            onBlurCapture={e => e.currentTarget.style.borderColor = t.border as string}
           />
-          {loading && <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>⏳</span>}
+          {loading && <span style={{
+            position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+            width: 8, height: 8, borderRadius: '50%', background: t.accent, animation: 'pulse 1.2s infinite',
+          }} />}
         </div>
         <button onClick={() => value.trim() && commit({ query: value.trim(), displayName: value.trim() })}
-          style={{ padding: '13px 22px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 12, fontSize: 20, fontWeight: 700, cursor: 'pointer' }}>+</button>
+          style={{
+            width: 48, height: 48, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 14,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            boxShadow: t.shadowCta,
+          }}><Plus size={22} strokeWidth={2.6} /></button>
       </div>
 
       {(open && suggestions.length > 0) || (loading && debouncedQ.length >= 2) || (retrying && debouncedQ.length >= 2) ? (
@@ -249,61 +277,61 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
           onMouseDown={e => e.preventDefault()}
           onTouchMove={() => { inputRef.current?.blur() /* hide keyboard, keep dropdown open */ }}
           style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
-          background: '#fff', border: '2px solid #3b82f6', borderRadius: 14,
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 200,
+          background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16,
           padding: 6, margin: 0, listStyle: 'none',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
-          maxHeight: '220px', overflowY: 'auto',
+          boxShadow: t.shadowDrop,
+          maxHeight: '240px', overflowY: 'auto',
         }}>
           {(loading || retrying) && suggestions.length === 0 && (
             <>
-              <li style={{ padding: '12px 14px', fontSize: 14, color: '#475569', fontWeight: 500, textAlign: 'center', animation: 'shimmer 1.8s infinite' }}>
-                {retrying ? '⏳ Kompas sa rozmýšľa, čakám na výsledky…' : LOADING_PHRASES[phraseIdx]}
+              <li style={{ padding: '12px 14px', fontSize: 14, color: t.textSec, fontWeight: 500, textAlign: 'center', animation: 'shimmer 1.8s infinite', fontFamily: t.font }}>
+                {retrying ? 'Čakám na výsledky…' : LOADING_PHRASES[phraseIdx]}
               </li>
               {[0,1,2].map(i => (
                 <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', flexShrink: 0, animation: 'shimmer 1.2s infinite' }} />
+                  <div style={{ width: 42, height: 42, borderRadius: 11, background: t.surface2, flexShrink: 0, animation: 'shimmer 1.2s infinite' }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ height: 13, borderRadius: 6, background: '#f1f5f9', marginBottom: 6, width: `${65 + i * 10}%`, animation: 'shimmer 1.2s infinite' }} />
-                    <div style={{ height: 11, borderRadius: 6, background: '#f1f5f9', width: '40%', animation: 'shimmer 1.2s infinite' }} />
+                    <div style={{ height: 13, borderRadius: 6, background: t.surface2, marginBottom: 6, width: `${65 + i * 10}%`, animation: 'shimmer 1.2s infinite' }} />
+                    <div style={{ height: 11, borderRadius: 6, background: t.surface2, width: '40%', animation: 'shimmer 1.2s infinite' }} />
                   </div>
                 </li>
               ))}
             </>
           )}
           {suggestions.map((hit, i) => {
-            const c = col(hit.bestStore)
+            const ink = storeInk(hit.bestStore, t.isDark)
             return (
               <li key={hit.groupKey}
                 onClick={() => commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl })}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', background: i === activeIdx ? '#eff6ff' : 'transparent' }}>
-                <ProductImg src={hit.imageUrl} size={40} />
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, cursor: 'pointer', background: i === activeIdx ? t.rowActive : 'transparent', transition: 'background 0.12s' }}>
+                <ProductImg src={hit.imageUrl} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hit.name}</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: t.font }}>{hit.name}</div>
+                  <div style={{ fontSize: 12, color: t.textSec, fontFamily: t.font }}>
                     {hit.packageSize > 0 && `${hit.packageSize}${hit.unit} · `}
-                    od <strong style={{ color: '#16a34a' }}>{hit.bestPrice.toFixed(2)} €</strong>
-                    {hit.saving && hit.saving > 0 && <span style={{ marginLeft: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>−{hit.saving.toFixed(2)} € vs {hit.worstStore}</span>}
-                    {(hit.promoFrom || hit.promoUntil) && <span style={{ marginLeft: 6 }}><PromoBadge from={hit.promoFrom} until={hit.promoUntil} /></span>}
+                    od <strong style={{ color: t.accentInk }}>{hit.bestPrice.toFixed(2)} €</strong>
+                    {hit.saving && hit.saving > 0 && <span style={{ marginLeft: 6, fontSize: 11, color: t.accentInk, fontWeight: 600 }}>−{hit.saving.toFixed(2)} € vs {hit.worstStore}</span>}
                   </div>
                 </div>
-                <div style={{ flexShrink: 0, textAlign: 'right' }}
+                <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}
                   onMouseEnter={e => {
                     const r = e.currentTarget.getBoundingClientRect()
                     setHoveredKey(hit.groupKey)
                     setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
                   }}
                   onMouseLeave={() => setHoveredKey(null)}>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: c.main + '18', color: c.main, fontWeight: 600, whiteSpace: 'nowrap', cursor: hit.storeCount > 1 ? 'default' : undefined }}>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: `${storeBrand(hit.bestStore).main}${t.isDark ? '22' : '18'}`, color: ink, fontWeight: 700, whiteSpace: 'nowrap', cursor: hit.storeCount > 1 ? 'default' : undefined, fontFamily: t.font }}>
                     {hit.bestStore}{hit.storeCount > 1 ? ` +${hit.storeCount - 1}` : ''}
                   </span>
+                  {(hit.promoFrom || hit.promoUntil) && <PromoBadge from={hit.promoFrom} until={hit.promoUntil} />}
                   {hoveredKey === hit.groupKey && hit.storeNames && hit.storeNames.length > 1 && (
                     <div style={{
                       // fixed → unikne overflow klipu scrollovateľného dropdownu
                       position: 'fixed', right: hoverPos.right, top: hoverPos.top, zIndex: 400,
-                      background: '#1e293b', color: '#fff', borderRadius: 8, padding: '6px 10px',
-                      fontSize: 11, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                      pointerEvents: 'none', textAlign: 'left',
+                      background: t.tooltipBg, color: t.tooltipText, borderRadius: 10, padding: '6px 10px',
+                      fontSize: 11, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+                      pointerEvents: 'none', textAlign: 'left', fontFamily: t.font,
                     }}>
                       {hit.storeNames.map(n => (
                         <div key={n} style={{ padding: '1px 0' }}>{n}</div>
@@ -322,60 +350,63 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
 
 // ─── ResultCard ───────────────────────────────────────────────────────────────
 function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
-  const { main, bg } = col(group.storeName)
+  const { t } = useT()
+  const b = storeBrand(group.storeName)
+  const ink = storeInk(group.storeName, t.isDark)
+  const headText = b.text ?? '#fff'
   return (
-    <div style={{ borderRadius: 16, overflow: 'hidden', border: `2px solid ${main}22`, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-      <div style={{ background: main, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <StoreLogo name={group.storeName} size={26} />
-          <span style={{ color: COLORS[group.storeName]?.text ?? '#fff', fontWeight: 800, fontSize: 18 }}>{group.storeName}</span>
+    <div style={{ borderRadius: 18, overflow: 'hidden', border: `1px solid ${t.border}`, background: t.surface, boxShadow: t.shadowCard }}>
+      <div style={{ background: b.main, padding: '13px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <StoreLogo name={group.storeName} size={24} />
+          <span style={{ color: headText, fontWeight: 800, fontSize: 17, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{group.storeName}</span>
         </div>
-        <span style={{ color: COLORS[group.storeName]?.text ?? '#fff', fontWeight: 800, fontSize: 22 }}>{group.subtotal.toFixed(2)} €</span>
+        <span style={{ color: headText, fontWeight: 800, fontSize: 20, fontFamily: t.fontHead }}>{group.subtotal.toFixed(2)} €</span>
       </div>
-      <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {group.items.map((item, i) => {
-          const unitLabel = item.unit === 'g' ? 'kg' : item.unit === 'ml' ? 'l' : item.unit
-          return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: bg }}>
-              <ProductImg src={item.imageUrl} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{item.query}</div>
-                {(item.name !== item.query || item.packageSize > 0) && (
-                  <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.name !== item.query ? item.name : ''}
-                    {item.name !== item.query && item.packageSize > 0 ? ' · ' : ''}
-                    {item.packageSize > 0 ? `${item.packageSize}${item.unit}` : ''}
-                  </div>
-                )}
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontWeight: 800, color: main, fontSize: 17 }}>{item.price.toFixed(2)} €</div>
-                {(item as any).saving > 0 && (
-                  <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, marginTop: 1 }}>
-                    ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
-                  </div>
-                )}
-                <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
-                {item.allStores.length > 1 && (
-                  <div style={{ fontSize: 11, marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {item.allStores
-                      .filter((s: any) => s.storeName !== group.storeName)
-                      .slice(0, 2)
-                      .map((s: any) => {
-                        const diff = parseFloat((s.price - item.price).toFixed(2))
-                        const plus = diff > 0
-                        return (
-                          <span key={s.storeName} style={{ color: plus ? '#dc2626' : '#16a34a' }}>
-                            {s.storeName} {plus ? '+' : ''}{diff.toFixed(2)}€
-                          </span>
-                        )
-                      })}
-                  </div>
-                )}
-              </div>
+      <div style={{ padding: '4px 14px' }}>
+        {group.items.map((item, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 11, padding: '11px 2px',
+            borderBottom: i < group.items.length - 1 ? `1px solid ${t.hairline}` : 'none',
+          }}>
+            <ProductImg src={item.imageUrl} size={36} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: t.text, fontFamily: t.font }}>{item.query}</div>
+              {(item.name !== item.query || item.packageSize > 0) && (
+                <div style={{ fontSize: 12, color: t.textSec, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: t.font }}>
+                  {item.name !== item.query ? item.name : ''}
+                  {item.name !== item.query && item.packageSize > 0 ? ' · ' : ''}
+                  {item.packageSize > 0 ? `${item.packageSize}${item.unit}` : ''}
+                </div>
+              )}
             </div>
-          )
-        })}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontWeight: 800, color: ink, fontSize: 17, fontFamily: t.fontHead }}>{item.price.toFixed(2)} €</div>
+              {(item as any).saving > 0 && (
+                <div style={{ fontSize: 11, color: t.accentInk, fontWeight: 600, marginTop: 1, fontFamily: t.font }}>
+                  ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
+                </div>
+              )}
+              <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
+              {item.allStores.length > 1 && (
+                <div style={{ fontSize: 11, marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', fontFamily: t.font }}>
+                  {item.allStores
+                    .filter((s: any) => s.storeName !== group.storeName)
+                    .slice(0, 2)
+                    .map((s: any) => {
+                      const diff = parseFloat((s.price - item.price).toFixed(2))
+                      const plus = diff > 0
+                      return (
+                        <span key={s.storeName} style={{ color: plus ? t.diffPlus : t.diffMinus }}>
+                          {s.storeName} {plus ? '+' : ''}{diff.toFixed(2)}€
+                        </span>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -387,12 +418,11 @@ type Toast = { query: string; originalQuery: string; name: string }
 function ApprovalPanel({
   approvals,
   onDecide,
-  col,
 }: {
   approvals: NeedsApproval[]
   onDecide: (decisions: { approval: NeedsApproval; accepted: boolean }[]) => void
-  col: (name: string) => { main: string; bg: string }
 }) {
+  const { t } = useT()
   const [accepted, setAccepted] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(approvals.map(a => [a.originalQuery, true]))
   )
@@ -400,11 +430,11 @@ function ApprovalPanel({
   const timerRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const removeToast = (query: string) =>
-    setToasts(prev => prev.filter(t => t.query !== query))
+    setToasts(prev => prev.filter(tt => tt.query !== query))
 
   const reject = (query: string, name: string) => {
     setAccepted(prev => ({ ...prev, [query]: false }))
-    setToasts(prev => [...prev.filter(t => t.query !== query), { query, originalQuery: query, name }])
+    setToasts(prev => [...prev.filter(tt => tt.query !== query), { query, originalQuery: query, name }])
     if (timerRefs.current[query]) clearTimeout(timerRefs.current[query])
     timerRefs.current[query] = setTimeout(() => removeToast(query), 5000)
   }
@@ -423,26 +453,26 @@ function ApprovalPanel({
   const visible = approvals.filter(a => accepted[a.originalQuery])
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 16, fontFamily: t.font }}>
       {/* Stacked toasts */}
       {toasts.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-          {toasts.map(t => (
-            <div key={t.query} style={{
-              background: '#1e293b', color: '#fff', borderRadius: 12, padding: '12px 16px',
+          {toasts.map(tt => (
+            <div key={tt.query} style={{
+              background: t.tooltipBg, color: t.tooltipText, borderRadius: 14, padding: '12px 16px',
               display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-              fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             }}>
               <div>
-                <div>„{t.name}" odstránené zo zoznamu</div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                <div>„{tt.name}" odstránené zo zoznamu</div>
+                <div style={{ fontSize: 12, opacity: 0.65, marginTop: 3 }}>
                   Produkt nie je dostupný vo zvolených obchodoch — zvážte pridanie ďalšieho obchodu
                 </div>
               </div>
-              <button onClick={() => undo(t.query)} style={{
-                background: '#fff', color: '#1e293b', border: 'none', borderRadius: 8,
+              <button onClick={() => undo(tt.query)} style={{
+                background: t.tooltipText, color: t.tooltipBg, border: 'none', borderRadius: 8,
                 padding: '5px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 13,
-                marginLeft: 14, flexShrink: 0,
+                marginLeft: 14, flexShrink: 0, fontFamily: t.font,
               }}>Späť</button>
             </div>
           ))}
@@ -450,16 +480,16 @@ function ApprovalPanel({
       )}
 
       {/* Panel */}
-      <div style={{ background: '#fffbeb', border: '2px solid #f59e0b', borderRadius: 16, padding: 18 }}>
-        <div style={{ fontWeight: 700, color: '#92400e', fontSize: 14, marginBottom: 4 }}>
-          ⚠️ Niektoré produkty nie sú v tvojich obchodoch
+      <div style={{ background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 18, padding: 18 }}>
+        <div style={{ fontWeight: 700, color: t.warnText, fontSize: 14, marginBottom: 4, fontFamily: t.fontHead }}>
+          Niektoré produkty nie sú v tvojich obchodoch
         </div>
-        <div style={{ fontSize: 13, color: '#78350f', marginBottom: 14 }}>
-          Našli sme alternatívy — zamietnuť ich môžeš kliknutím na ✕
+        <div style={{ fontSize: 13, color: t.warnText, opacity: 0.8, marginBottom: 14 }}>
+          Našli sme alternatívy — zamietnuť ich môžeš krížikom
         </div>
 
         {visible.length === 0 && (
-          <div style={{ fontSize: 13, color: '#92400e', textAlign: 'center', padding: '10px 0' }}>
+          <div style={{ fontSize: 13, color: t.warnText, textAlign: 'center', padding: '10px 0' }}>
             Všetky náhrady zamietnuté
           </div>
         )}
@@ -467,48 +497,47 @@ function ApprovalPanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {visible.map(a => {
             const s = a.suggested
-            const c = col(s.storeName)
-            const unitLabel = s.unit === 'g' ? 'kg' : s.unit === 'ml' ? 'l' : s.unit
+            const ink = storeInk(s.storeName, t.isDark)
             return (
               <div key={a.originalQuery} style={{
-                background: '#fff', borderRadius: 12, padding: '12px 14px',
-                border: '2px solid #86efac',
+                background: t.surface, borderRadius: 14, padding: '12px 14px',
+                border: `1px solid ${t.border}`,
                 display: 'flex', alignItems: 'center', gap: 12,
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Hľadaný</div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>"{a.originalQuery}"</div>
-                  <div style={{ fontSize: 12, color: '#ef4444' }}>Nie je v zvolených obchodoch</div>
+                  <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Hľadaný</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: t.text }}>„{a.originalQuery}"</div>
+                  <div style={{ fontSize: 12, color: t.errorText }}>Nie je v zvolených obchodoch</div>
                 </div>
 
-                <div style={{ color: '#cbd5e1', fontSize: 18, flexShrink: 0 }}>→</div>
+                <div style={{ color: t.textFaint, fontSize: 18, flexShrink: 0 }}>→</div>
 
                 <div style={{ flex: 2, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <ProductImg src={s.imageUrl} size={44} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      {s.packageSize}{s.unit} · <strong style={{ color: '#16a34a' }}>{s.price.toFixed(2)} €</strong>
-                      <span style={{ color: '#94a3b8' }}> ({s.unitPrice.toFixed(2)} €/{unitLabel})</span>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
+                    <div style={{ fontSize: 12, color: t.textSec }}>
+                      {s.packageSize > 0 ? `${s.packageSize}${s.unit} · ` : ''}<strong style={{ color: t.accentInk }}>{s.price.toFixed(2)} €</strong>
                     </div>
-                    <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 20, background: c.main + '18', color: c.main, fontWeight: 600 }}>{s.storeName}</span>
+                    <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: `${storeBrand(s.storeName).main}${t.isDark ? '22' : '18'}`, color: ink, fontWeight: 700 }}>{s.storeName}</span>
                   </div>
                 </div>
 
                 <button onClick={() => reject(a.originalQuery, s.name)} style={{
                   flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
-                  border: '2px solid #fca5a5', background: '#fef2f2',
-                  color: '#dc2626', fontWeight: 700, cursor: 'pointer', fontSize: 16,
+                  border: `1px solid ${t.promoBorder}`, background: t.promoBg,
+                  color: t.promoText, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>✕</button>
+                }}><X size={15} strokeWidth={2.4} /></button>
               </div>
             )
           })}
         </div>
 
         <button onClick={confirm} style={{
-          marginTop: 14, width: '100%', padding: '12px', fontSize: 15, fontWeight: 700,
-          background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer',
+          marginTop: 14, width: '100%', padding: '13px', fontSize: 15, fontWeight: 800,
+          background: t.accent, color: t.accentOn, border: 'none', borderRadius: 14, cursor: 'pointer',
+          fontFamily: t.fontHead, boxShadow: t.shadowCta,
         }}>
           Potvrdiť a prepočítať
         </button>
@@ -519,6 +548,7 @@ function ApprovalPanel({
 
 // ─── SavedListCard ────────────────────────────────────────────────────────────
 function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => void }) {
+  const { t } = useT()
   // checked: Set of "companyId:query" keys
   const [checked, setChecked] = useState<Set<string>>(new Set())
   // collapsed stores (manually toggled by user)
@@ -552,44 +582,44 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
     })
   }
 
-  const cardBg = allDone ? '#f0fdf4' : '#fff'
-  const cardBorder = allDone ? '2px solid #86efac' : '2px solid transparent'
-
   return (
-    <div style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: 18, boxShadow: '0 1px 6px rgba(0,0,0,0.07)', transition: 'background 0.2s' }}>
+    <div style={{
+      background: allDone ? t.doneBg : t.surface,
+      border: `1px solid ${allDone ? t.accent + '55' : t.border}`,
+      borderRadius: 18, padding: 16, boxShadow: t.shadowCard, transition: 'background 0.2s', fontFamily: t.font,
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {allDone && <span style={{ fontSize: 16 }}>✅</span>}
-            <span style={{ fontWeight: 700, fontSize: 16, color: allDone ? '#15803d' : '#0f172a' }}>{list.name}</span>
-            {allDone && <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>Hotové</span>}
+            <span style={{ fontWeight: 700, fontSize: 15, color: allDone ? t.doneText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{list.name}</span>
+            {allDone && <span style={{ fontSize: 11, fontWeight: 700, color: t.accentSoftText, background: t.accentSoftBg, padding: '2px 9px', borderRadius: 999 }}>Hotové</span>}
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{new Date(list.savedAt).toLocaleString('sk-SK')}</div>
+          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{new Date(list.savedAt).toLocaleString('sk-SK')}</div>
         </div>
-        <button onClick={onDelete} style={{ background: 'none', border: '1px solid #fca5a5', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', color: '#ef4444', fontSize: 12, fontWeight: 600 }}>Zmazať</button>
+        <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${t.errorBorder}`, borderRadius: 10, padding: '5px 12px', cursor: 'pointer', color: t.errorText, fontSize: 12, fontWeight: 600, fontFamily: t.font }}>Zmazať</button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {list.stores.map(store => {
           const done = isStoreDone(store)
           const open = !storeCollapsed(store)
-          const c = col(store.storeName)
+          const ink = storeInk(store.storeName, t.isDark)
           return (
             <div key={store.companyId} style={{
-              borderRadius: 10, overflow: 'hidden',
-              border: `1px solid ${done ? '#bbf7d0' : c.main + '33'}`,
-              background: done ? '#f0fdf4' : c.bg ?? '#f8fafc',
+              borderRadius: 12, overflow: 'hidden',
+              border: `1px solid ${done ? t.accent + '44' : t.border}`,
+              background: done ? t.accentSoftBg : t.surface2,
             }}>
               <div
                 onClick={() => toggleCollapse(store.companyId)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', userSelect: 'none' }}>
-                <StoreLogo name={store.storeName} size={16} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: c.main, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1 }}>{store.storeName}</span>
-                <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: 13, color: done ? '#16a34a' : '#475569', textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1 }}>{store.subtotal.toFixed(2)} €</span>
-                <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>{open ? '▲' : '▼'}</span>
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', cursor: 'pointer', userSelect: 'none' }}>
+                <StoreLogo name={store.storeName} size={20} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: ink, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{store.storeName}</span>
+                <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: 13, color: done ? t.doneText : t.textSec, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1 }}>{store.subtotal.toFixed(2)} €</span>
+                <span style={{ color: t.textMuted, marginLeft: 4, display: 'flex' }}>{open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
               </div>
               {open && (
-                <div style={{ borderTop: `1px solid ${done ? '#bbf7d0' : c.main + '22'}` }}>
+                <div style={{ borderTop: `1px solid ${t.hairline}` }}>
                   {store.items.map(item => {
                     const itemDone = isItemChecked(store.companyId, item.query)
                     return (
@@ -598,21 +628,21 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
                         onClick={() => toggleItem(store.companyId, item.query)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '7px 12px', cursor: 'pointer',
-                          background: itemDone ? '#dcfce744' : 'transparent',
-                          borderBottom: `1px solid ${c.main}11`,
+                          padding: '8px 12px', cursor: 'pointer',
+                          background: itemDone ? t.accentSoftBg + '88' : 'transparent',
+                          borderBottom: `1px solid ${t.hairline}`,
                         }}>
                         <div style={{
-                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                          border: `2px solid ${itemDone ? '#16a34a' : '#cbd5e1'}`,
-                          background: itemDone ? '#16a34a' : '#fff',
+                          width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                          border: `2px solid ${itemDone ? t.accent : t.textFaint}`,
+                          background: itemDone ? t.accent : 'transparent',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          {itemDone && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                          {itemDone && <Check size={12} strokeWidth={3.2} color={t.accentOn} />}
                         </div>
-                        <span style={{ flex: 1, fontSize: 13, color: itemDone ? '#94a3b8' : '#475569', textDecoration: itemDone ? 'line-through' : 'none' }}>{item.name}</span>
+                        <span style={{ flex: 1, fontSize: 13, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>{item.name}</span>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: itemDone ? '#94a3b8' : '#1e293b', textDecoration: itemDone ? 'line-through' : 'none' }}>{item.price.toFixed(2)} €</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>{item.price.toFixed(2)} €</span>
                           {!itemDone && <PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} />}
                         </div>
                       </div>
@@ -626,7 +656,7 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
       </div>
 
       {list.unmatched.length > 0 && (
-        <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', borderRadius: 6, padding: '4px 8px', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: t.warnText, background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 10, padding: '6px 10px', marginTop: 10 }}>
           Nenájdené: {list.unmatched.join(', ')}
         </div>
       )}
@@ -636,6 +666,7 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
 
 // ─── SavedListsScreen ─────────────────────────────────────────────────────────
 function SavedListsScreen({ onBack }: { onBack: () => void }) {
+  const { t } = useT()
   const [lists, setLists] = useState<SavedList[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -664,21 +695,18 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <button onClick={onBack} style={{ background: 'none', border: '2px solid #e2e8f0', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#475569' }}>← Späť</button>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Uložené zoznamy</h1>
-        </div>
+        <ScreenHeader title="Uložené zoznamy" onBack={onBack} />
 
         {loading ? (
-          <div style={{ background: '#fff', borderRadius: 18, padding: 32, textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 6px rgba(0,0,0,0.07)', animation: 'shimmer 1.2s infinite' }}>
+          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 32, textAlign: 'center', color: t.textMuted, boxShadow: t.shadowCard, animation: 'shimmer 1.2s infinite' }}>
             Načítavam zoznamy…
           </div>
         ) : lists.length === 0 ? (
-          <div style={{ background: '#fff', borderRadius: 18, padding: 32, textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Žiadne uložené zoznamy</div>
+          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 36, textAlign: 'center', color: t.textMuted, boxShadow: t.shadowCard }}>
+            <ClipboardList size={36} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <div style={{ fontWeight: 700, fontSize: 15, color: t.textSec, fontFamily: t.fontHead }}>Žiadne uložené zoznamy</div>
             <div style={{ fontSize: 13, marginTop: 4 }}>Vytvor nákupný zoznam a uložíš ho sem</div>
           </div>
         ) : (
@@ -693,20 +721,69 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ─── AuthInput helper ─────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 function AuthInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const { t } = useT()
   return (
     <input {...props} style={{
-      width: '100%', padding: '12px 14px', fontSize: 15,
-      border: '2px solid #e2e8f0', borderRadius: 10, outline: 'none',
-      fontFamily: 'inherit', boxSizing: 'border-box', color: '#1a202c',
+      width: '100%', padding: '14px 16px', fontSize: 15,
+      border: `1px solid ${t.border}`, borderRadius: 12, outline: 'none',
+      fontFamily: t.font, boxSizing: 'border-box', color: t.text, background: t.inputBg,
       ...props.style,
     }} />
   )
 }
 
+function AuthShell({ children }: { children: React.ReactNode }) {
+  const { t } = useT()
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '24px 16px' }}>
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 20, padding: 32, boxShadow: t.shadowCard }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AuthLogo() {
+  const { t } = useT()
+  return (
+    <div style={{
+      width: 60, height: 60, borderRadius: 18, background: t.accent, color: t.accentOn,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+      boxShadow: t.shadowCta,
+    }}><ShoppingCart size={28} strokeWidth={2.2} /></div>
+  )
+}
+
+function AuthCta({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
+  const { t } = useT()
+  return (
+    <button type="submit" disabled={loading} style={{
+      padding: '14px', fontSize: 16, fontWeight: 800, fontFamily: t.fontHead,
+      background: loading ? t.ctaDisabledBg : t.accent, color: loading ? t.ctaDisabledText : t.accentOn,
+      border: 'none', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer', marginTop: 4,
+      boxShadow: loading ? 'none' : t.shadowCta,
+    }}>{loading ? loadingLabel : label}</button>
+  )
+}
+
+function AuthSecondary({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const { t } = useT()
+  return (
+    <button onClick={onClick} style={{
+      marginTop: 14, width: '100%', padding: '12px', fontSize: 14, fontWeight: 600,
+      background: 'transparent', color: t.textSec, border: `1px solid ${t.border}`, borderRadius: 12,
+      cursor: 'pointer', fontFamily: t.font,
+    }}>{children}</button>
+  )
+}
+
 // ─── LoginScreen ──────────────────────────────────────────────────────────────
 function LoginScreen({ onSwitch, onBack, onSuccess }: { onSwitch: () => void; onBack: () => void; onSuccess: () => void }) {
+  const { t } = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -722,38 +799,30 @@ function LoginScreen({ onSwitch, onBack, onSuccess }: { onSwitch: () => void; on
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
-        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-          <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Prihlásiť sa</h2>
-          <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>SmartNákup — tvoj nákupný optimalizátor</p>
-          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
-            <AuthInput type="password" placeholder="Heslo" value={password} onChange={e => setPassword(e.target.value)} required />
-            {error && <div style={{ color: '#dc2626', fontSize: 13, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{error}</div>}
-            <button type="submit" disabled={loading} style={{
-              padding: '13px', fontSize: 15, fontWeight: 700,
-              background: loading ? '#94a3b8' : '#2563eb', color: '#fff',
-              border: 'none', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer', marginTop: 4,
-            }}>{loading ? 'Prihlasujem...' : 'Prihlásiť sa'}</button>
-          </form>
-          <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: '#64748b' }}>
-            Nemáš účet?{' '}
-            <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: 14, padding: 0 }}>
-              Zaregistruj sa
-            </button>
-          </div>
-          <button onClick={onBack} style={{ marginTop: 16, width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
-            Pokračovať bez prihlásenia
-          </button>
-        </div>
+    <AuthShell>
+      <AuthLogo />
+      <h2 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Vitaj späť</h2>
+      <p style={{ margin: '0 0 24px', color: t.textSec, fontSize: 14 }}>Prihlás sa a ukladaj zoznamy do cloudu</p>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
+        <AuthInput type="password" placeholder="Heslo" value={password} onChange={e => setPassword(e.target.value)} required />
+        {error && <div style={{ color: t.errorText, fontSize: 13, background: t.errorBg, border: `1px solid ${t.errorBorder}`, padding: '8px 12px', borderRadius: 10 }}>{error}</div>}
+        <AuthCta loading={loading} label="Prihlásiť sa" loadingLabel="Prihlasujem…" />
+      </form>
+      <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: t.textSec }}>
+        Nemáš účet?{' '}
+        <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: t.accentInk, cursor: 'pointer', fontWeight: 700, fontSize: 14, padding: 0, fontFamily: t.font }}>
+          Zaregistruj sa
+        </button>
       </div>
-    </div>
+      <AuthSecondary onClick={onBack}>Pokračovať bez prihlásenia</AuthSecondary>
+    </AuthShell>
   )
 }
 
 // ─── RegisterScreen ───────────────────────────────────────────────────────────
 function RegisterScreen({ onSwitch, onBack, onVerify }: { onSwitch: () => void; onBack: () => void; onVerify: (email: string) => void }) {
+  const { t } = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -771,96 +840,82 @@ function RegisterScreen({ onSwitch, onBack, onVerify }: { onSwitch: () => void; 
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
-        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-          <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Registrácia</h2>
-          <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14 }}>Vytvor si bezplatný účet</p>
-          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <AuthInput type="text" placeholder="Meno" value={name} onChange={e => setName(e.target.value)} required />
-            <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
-            <AuthInput type="password" placeholder="Heslo (min. 8 znakov)" value={password} onChange={e => setPassword(e.target.value)} required />
-            {error && <div style={{ color: '#dc2626', fontSize: 13, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{error}</div>}
-            <button type="submit" disabled={loading} style={{
-              padding: '13px', fontSize: 15, fontWeight: 700,
-              background: loading ? '#94a3b8' : '#1a7f37', color: '#fff',
-              border: 'none', borderRadius: 12, cursor: loading ? 'not-allowed' : 'pointer', marginTop: 4,
-            }}>{loading ? 'Registrujem...' : 'Vytvoriť účet'}</button>
-          </form>
-          <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: '#64748b' }}>
-            Už máš účet?{' '}
-            <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: 14, padding: 0 }}>
-              Prihlásiť sa
-            </button>
-          </div>
-          <button onClick={onBack} style={{ marginTop: 16, width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
-            Pokračovať bez prihlásenia
-          </button>
-        </div>
+    <AuthShell>
+      <AuthLogo />
+      <h2 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Vytvor si účet</h2>
+      <p style={{ margin: '0 0 24px', color: t.textSec, fontSize: 14 }}>Registrácia je bezplatná</p>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <AuthInput type="text" placeholder="Meno" value={name} onChange={e => setName(e.target.value)} required />
+        <AuthInput type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
+        <AuthInput type="password" placeholder="Heslo (min. 8 znakov)" value={password} onChange={e => setPassword(e.target.value)} required />
+        {error && <div style={{ color: t.errorText, fontSize: 13, background: t.errorBg, border: `1px solid ${t.errorBorder}`, padding: '8px 12px', borderRadius: 10 }}>{error}</div>}
+        <AuthCta loading={loading} label="Vytvoriť účet" loadingLabel="Registrujem…" />
+      </form>
+      <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, color: t.textSec }}>
+        Už máš účet?{' '}
+        <button onClick={onSwitch} style={{ background: 'none', border: 'none', color: t.accentInk, cursor: 'pointer', fontWeight: 700, fontSize: 14, padding: 0, fontFamily: t.font }}>
+          Prihlásiť sa
+        </button>
       </div>
-    </div>
+      <AuthSecondary onClick={onBack}>Pokračovať bez prihlásenia</AuthSecondary>
+    </AuthShell>
   )
 }
 
 // ─── VerifyEmailScreen ────────────────────────────────────────────────────────
 function VerifyEmailScreen({ email, onBack }: { email: string; onBack: () => void }) {
+  const { t } = useT()
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px' }}>
-        <div style={{ background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 800, color: '#0f172a' }}>Skontroluj e-mail</h2>
-          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 8 }}>
-            Poslali sme overovací link na:
-          </p>
-          <p style={{ fontWeight: 700, color: '#1a202c', marginBottom: 24 }}>{email}</p>
-          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 24 }}>
-            Po overení sa môžeš prihlásiť a ukladať nákupné zoznamy do cloudu.
-          </p>
-          <button onClick={onBack} style={{ width: '100%', padding: '11px', fontSize: 14, fontWeight: 600, background: '#f8fafc', color: '#475569', border: '2px solid #e2e8f0', borderRadius: 10, cursor: 'pointer' }}>
-            Pokračovať bez prihlásenia
-          </button>
-        </div>
+    <AuthShell>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{
+          width: 60, height: 60, borderRadius: 18, background: t.accentSoftBg, color: t.accentSoftText,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px',
+        }}><Mail size={28} strokeWidth={2} /></div>
+        <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Skontroluj e-mail</h2>
+        <p style={{ color: t.textSec, fontSize: 14, marginBottom: 8 }}>
+          Poslali sme overovací link na:
+        </p>
+        <p style={{ fontWeight: 700, color: t.text, marginBottom: 24 }}>{email}</p>
+        <p style={{ color: t.textMuted, fontSize: 13, marginBottom: 8 }}>
+          Po overení sa môžeš prihlásiť a ukladať nákupné zoznamy do cloudu.
+        </p>
+        <AuthSecondary onClick={onBack}>Pokračovať bez prihlásenia</AuthSecondary>
       </div>
-    </div>
+    </AuthShell>
   )
 }
 
 // ─── Recepty ──────────────────────────────────────────────────────────────────
-type Recipe = { id: string; emoji: string; name: string; time: string; ingredients: string[] }
+type Recipe = { id: string; name: string; time: string; ingredients: string[] }
 
 const RECIPES: Recipe[] = [
   {
     id: 'bolognese',
-    emoji: '🍝',
     name: 'Spaghetti bolognese',
     time: '40 min',
     ingredients: ['mleté mäso', 'cestoviny', 'paradajková omáčka', 'cibuľa', 'mrkva', 'cesnak'],
   },
   {
     id: 'sosovica',
-    emoji: '🫘',
     name: 'Šošovicový prívarok s vajcom',
     time: '35 min',
     ingredients: ['červená šošovica', 'klobása', 'cibuľa', 'mrkva', 'zemiaky', 'vajcia', 'kyslá smotana'],
   },
   {
     id: 'segedin',
-    emoji: '🥘',
     name: 'Segedínsky guláš',
     time: '60 min',
     ingredients: ['bravčové mäso', 'kyslá kapusta', 'cibuľa', 'kyslá smotana', 'paprika mletá', 'ryža'],
   },
   {
     id: 'polievka',
-    emoji: '🍲',
     name: 'Kuracia polievka s rezancami',
     time: '50 min',
     ingredients: ['kuracie prsia', 'mrkva', 'zeler', 'cibuľa', 'rezance', 'petržlen'],
   },
   {
     id: 'rizoto',
-    emoji: '🍄',
     name: 'Rizoto so šampiňónmi',
     time: '30 min',
     ingredients: ['ryža', 'šampiňóny', 'maslo', 'cibuľa', 'cesnak', 'smotana na varenie'],
@@ -871,6 +926,7 @@ function RecipesScreen({ onBack, onAddToCart }: {
   onBack: () => void
   onAddToCart: (items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[]) => void
 }) {
+  const { t } = useT()
   const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -897,72 +953,74 @@ function RecipesScreen({ onBack, onAddToCart }: {
   useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current) }, [])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button onClick={onBack} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}>← Späť</button>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>🍳 Recepty z akcií</h1>
-        </div>
+        <ScreenHeader title="Recepty z akcií" onBack={onBack} />
 
         {!hits && (
-          <div style={{ background: '#fff', borderRadius: 18, padding: 24, marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.07)', textAlign: 'center' }}>
-            <div style={{ fontSize: 15, color: '#475569', marginBottom: 16 }}>
-              Zistíme ktoré suroviny sú práve v akcii na kompaszliav.sk a vypočítame orientačnú cenu nákupu.
+          <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 26, marginBottom: 20, boxShadow: t.shadowCard, textAlign: 'center' }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14, background: t.accentSoftBg, color: t.accentSoftText,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px',
+            }}><CookingPot size={24} strokeWidth={2} /></div>
+            <div style={{ fontSize: 15, color: t.textSec, marginBottom: 18, lineHeight: 1.5 }}>
+              Zistíme ktoré suroviny sú práve v akcii a vypočítame orientačnú cenu nákupu.
             </div>
             <button onClick={checkAvailability} disabled={loading} style={{
-              padding: '12px 24px', fontSize: 15, fontWeight: 700,
-              background: '#2563eb', color: '#fff', border: 'none',
-              borderRadius: 12, cursor: 'pointer',
+              padding: '13px 26px', fontSize: 15, fontWeight: 800, fontFamily: t.fontHead,
+              background: t.accent, color: t.accentOn, border: 'none',
+              borderRadius: 14, cursor: 'pointer', boxShadow: t.shadowCta,
             }}>
-              {loading ? '🔍 Kontrolujem akcie…' : '🔍 Zistiť dostupnosť a orientačnú cenu'}
+              {loading ? 'Kontrolujem akcie…' : 'Zistiť dostupnosť a orientačnú cenu'}
             </button>
           </div>
         )}
 
         {hits && RECIPES.map(recipe => {
           const onSale = recipe.ingredients.filter(i => hits[i])
-          const missing = recipe.ingredients.filter(i => hits[i] === null || hits[i] === undefined)
           const salePrice = onSale.reduce((s, i) => s + (hits[i]?.bestPrice ?? 0), 0)
 
           return (
-            <div key={recipe.id} style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <span style={{ fontSize: 36 }}>{recipe.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 17, color: '#0f172a' }}>{recipe.name}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>⏱ {recipe.time}</div>
+            <div key={recipe.id} style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: t.shadowCard }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 14, background: t.accentSoftBg, color: t.accentSoftText,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}><CookingPot size={23} strokeWidth={2} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 17, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{recipe.name}</div>
+                  <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Clock size={12} strokeWidth={2.2} /> {recipe.time}
+                  </div>
                 </div>
                 {salePrice > 0 && (
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>akciové suroviny</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>~{salePrice.toFixed(2)} €</div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, color: t.textMuted }}>akciové suroviny</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: t.accentInk, fontFamily: t.fontHead }}>~{salePrice.toFixed(2)} €</div>
                   </div>
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: missing.length ? 10 : 14 }}>
-                {recipe.ingredients.map(ing => {
+              {/* Suroviny — zoznam so zarovnanými cenami */}
+              <div style={{ border: `1px solid ${t.hairline}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+                {recipe.ingredients.map((ing, idx) => {
                   const hit = hits[ing]
                   return (
-                    <span key={ing} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '5px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                      background: hit ? '#dcfce7' : '#f8fafc',
-                      color: hit ? '#15803d' : '#94a3b8',
-                      border: `1.5px solid ${hit ? '#86efac' : '#e2e8f0'}`,
+                    <div key={ing} style={{
+                      display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px',
+                      borderBottom: idx < recipe.ingredients.length - 1 ? `1px solid ${t.hairline}` : 'none',
                     }}>
-                      {hit ? '🏷️' : '➖'} {ing}
-                      {hit && <span style={{ fontWeight: 700 }}>{hit.bestPrice.toFixed(2)} €</span>}
-                    </span>
+                      {hit
+                        ? <Check size={15} strokeWidth={2.6} color={t.accent} style={{ flexShrink: 0 }} />
+                        : <Minus size={15} strokeWidth={2.2} color={t.textFaint} style={{ flexShrink: 0 }} />}
+                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: hit ? t.text : t.textMuted }}>{ing}</span>
+                      {hit
+                        ? <span style={{ fontSize: 13.5, fontWeight: 700, color: t.accentInk }}>{hit.bestPrice.toFixed(2)} €</span>
+                        : <span style={{ fontSize: 12.5, fontWeight: 500, color: t.textFaint }}>nie v akcii</span>}
+                    </div>
                   )
                 })}
               </div>
-
-              {missing.length > 0 && (
-                <div style={{ fontSize: 12, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
-                  Nie v akcii ({missing.length}): <span style={{ color: '#94a3b8' }}>{missing.join(', ')}</span>
-                </div>
-              )}
 
               <button
                 onClick={() => {
@@ -974,12 +1032,12 @@ function RecipesScreen({ onBack, onAddToCart }: {
                   onBack()
                 }}
                 style={{
-                  width: '100%', padding: '11px', fontSize: 14, fontWeight: 700,
-                  background: '#2563eb', color: '#fff', border: 'none',
+                  width: '100%', padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead,
+                  background: t.accent, color: t.accentOn, border: 'none',
                   borderRadius: 12, cursor: 'pointer',
                 }}
               >
-                🛒 Pridať suroviny do nákupného zoznamu
+                Pridať suroviny do zoznamu
               </button>
             </div>
           )
@@ -987,11 +1045,12 @@ function RecipesScreen({ onBack, onAddToCart }: {
 
         {hits && (
           <button onClick={checkAvailability} disabled={loading} style={{
-            width: '100%', padding: '10px', fontSize: 13, fontWeight: 600,
-            background: '#fff', color: '#475569', border: '2px solid #e2e8f0',
-            borderRadius: 12, cursor: 'pointer', marginTop: 4,
+            width: '100%', padding: '11px', fontSize: 13, fontWeight: 600,
+            background: t.surface, color: t.textSec, border: `1px solid ${t.border}`,
+            borderRadius: 12, cursor: 'pointer', marginTop: 4, fontFamily: t.font,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}>
-            {loading ? '🔍 Kontrolujem…' : '🔄 Obnoviť ceny'}
+            <RefreshCw size={14} /> {loading ? 'Kontrolujem…' : 'Obnoviť ceny'}
           </button>
         )}
       </div>
@@ -999,8 +1058,103 @@ function RecipesScreen({ onBack, onAddToCart }: {
   )
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
-export default function App() {
+// ─── Drawer (bočné menu) ──────────────────────────────────────────────────────
+function Drawer({ screen, session, onNavigate, onClose, onLogout }: {
+  screen: string
+  session: { user: { email: string; name?: string | null } }
+  onNavigate: (s: 'main' | 'recipes' | 'saved') => void
+  onClose: () => void
+  onLogout: () => void
+}) {
+  const { t, mode, setMode } = useT()
+  const initial = (session.user.name || session.user.email || '?')[0].toUpperCase()
+
+  const NAV: { label: string; screen: 'main' | 'recipes' | 'saved'; icon: React.ReactNode }[] = [
+    { label: 'Nákup', screen: 'main', icon: <ShoppingCart size={18} strokeWidth={2} /> },
+    { label: 'Recepty', screen: 'recipes', icon: <CookingPot size={18} strokeWidth={2} /> },
+    { label: 'Moje zoznamy', screen: 'saved', icon: <ClipboardList size={18} strokeWidth={2} /> },
+  ]
+
+  const MODES: { m: ThemeMode; label: string; icon: React.ReactNode }[] = [
+    { m: 'light', label: 'Svetlý', icon: <Sun size={15} strokeWidth={2.2} /> },
+    { m: 'dark', label: 'Tmavý', icon: <Moon size={15} strokeWidth={2.2} /> },
+    { m: 'system', label: 'Systém', icon: <Monitor size={15} strokeWidth={2.2} /> },
+  ]
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: t.scrim }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'absolute', top: 0, right: 0, bottom: 0, width: 280,
+        background: t.surface, boxShadow: t.shadowDrawer,
+        display: 'flex', flexDirection: 'column', padding: 22, fontFamily: t.font,
+      }}>
+        {/* Profil */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 26, paddingTop: 6 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: '50%', background: t.accentSoftBg, color: t.accentSoftText,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16,
+            fontFamily: t.fontHead, flexShrink: 0,
+          }}>{initial}</div>
+          <div style={{ minWidth: 0 }}>
+            {session.user.name && <div style={{ fontSize: 14, fontWeight: 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.user.name}</div>}
+            <div style={{ fontSize: 12, color: t.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.user.email}</div>
+          </div>
+        </div>
+
+        {/* Navigácia */}
+        {NAV.map(item => {
+          const active = screen === item.screen
+          return (
+            <button key={item.screen} onClick={() => onNavigate(item.screen)} style={{
+              background: active ? t.accentSoftBg : 'none', border: 'none', textAlign: 'left',
+              padding: '12px 12px', margin: '2px -6px', borderRadius: 12,
+              fontSize: 15, fontWeight: active ? 700 : 600, fontFamily: t.font,
+              color: active ? t.accentSoftText : t.text, cursor: 'pointer', width: 'calc(100% + 12px)',
+              display: 'flex', alignItems: 'center', gap: 11,
+            }}>
+              <span style={{ color: active ? t.accentSoftText : t.textMuted, display: 'flex' }}>{item.icon}</span>
+              {item.label}
+            </button>
+          )
+        })}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Prepínač témy */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Vzhľad</div>
+          <div style={{ display: 'flex', gap: 4, background: t.surface2, borderRadius: 12, padding: 4 }}>
+            {MODES.map(({ m, label, icon }) => {
+              const active = mode === m
+              return (
+                <button key={m} onClick={() => setMode(m)} style={{
+                  flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                  background: active ? t.surface : 'transparent',
+                  color: active ? t.text : t.textMuted,
+                  fontSize: 11, fontWeight: active ? 700 : 500, fontFamily: t.font,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                  boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                }}>
+                  {icon}{label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <button onClick={onLogout} style={{
+          background: t.surface2, border: 'none', borderRadius: 12, padding: '11px 14px',
+          cursor: 'pointer', fontSize: 13, fontWeight: 600, color: t.textSec, width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: t.font,
+        }}><LogOut size={15} strokeWidth={2.2} /> Odhlásiť sa</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── AppInner ─────────────────────────────────────────────────────────────────
+function AppInner() {
+  const { t } = useT()
   const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify' | 'recipes'>('main')
   const [menuOpen, setMenuOpen] = useState(false)
   const [verifyEmail, setVerifyEmail] = useState('')
@@ -1014,6 +1168,9 @@ export default function App() {
   const [cacheInfo, setCacheInfo] = useState<{ rawProducts: number; groups: number; ageMinutes: number } | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<NeedsApproval[]>([])
   const [pendingItems, setPendingItems] = useState<CartItem[]>([])
+
+  // Pozadie dokumentu (overscroll) podľa témy
+  useEffect(() => { document.body.style.background = t.bg }, [t.bg])
 
   const saveResult = async () => {
     if (!result) return
@@ -1091,145 +1248,153 @@ export default function App() {
   if (screen === 'login') return <LoginScreen onSwitch={() => setScreen('register')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onSuccess={() => setScreen('main')} />
   if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
   if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
-  if (screen === 'saved') return <SavedListsScreen onBack={() => setScreen('main')} />
+  if (screen === 'saved') return (
+    <>
+      <SavedListsScreen onBack={() => setScreen('main')} />
+      {menuOpen && session && (
+        <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
+          onNavigate={s => { setScreen(s); setMenuOpen(false) }}
+          onLogout={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} />
+      )}
+    </>
+  )
   if (screen === 'recipes') return (
-    <RecipesScreen
-      onBack={() => setScreen('main')}
-      onAddToCart={items => {
-        items.forEach(item => setCartItems(prev => prev.some(i => i.query === item.query) ? prev : [...prev, item]))
-      }}
-    />
+    <>
+      <RecipesScreen
+        onBack={() => setScreen('main')}
+        onAddToCart={items => {
+          items.forEach(item => setCartItems(prev => prev.some(i => i.query === item.query) ? prev : [...prev, item]))
+        }}
+      />
+      {menuOpen && session && (
+        <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
+          onNavigate={s => { setScreen(s); setMenuOpen(false) }}
+          onLogout={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} />
+      )}
+    </>
   )
 
+  const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
 
-        {/* Side menu — len pre prihlásených, otvára sa z pravého rohu */}
+        {/* Bočné menu — len pre prihlásených */}
         {menuOpen && session && (
-          <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.35)' }}>
-            <div onClick={e => e.stopPropagation()} style={{
-              position: 'absolute', top: 0, right: 0, bottom: 0, width: 260,
-              background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
-              display: 'flex', flexDirection: 'column', padding: 24,
-            }}>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24, paddingTop: 8 }}>{session.user.email}</div>
-              {[
-                { label: '🛒 Nákup', screen: 'main' as const },
-                { label: '🍳 Recepty', screen: 'recipes' as const },
-                { label: '📋 Moje zoznamy', screen: 'saved' as const },
-              ].map(item => {
-                const active = screen === item.screen
-                return (
-                  <button key={item.screen} onClick={() => { setScreen(item.screen); setMenuOpen(false) }} style={{
-                    background: active ? '#eff6ff' : 'none', border: 'none', textAlign: 'left',
-                    padding: '12px 10px', margin: '2px -10px', borderRadius: 10,
-                    fontSize: 16, fontWeight: active ? 700 : 600,
-                    color: active ? '#2563eb' : '#1e293b', cursor: 'pointer', width: 'calc(100% + 20px)',
-                  }}>{item.label}</button>
-                )
-              })}
-              <div style={{ flex: 1 }} />
-              <button onClick={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} style={{
-                background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 14px',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', width: '100%',
-              }}>Odhlásiť sa</button>
-            </div>
-          </div>
+          <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
+            onNavigate={s => { setScreen(s); setMenuOpen(false) }}
+            onLogout={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} />
         )}
 
+        {/* Hlavička */}
         <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>🛒 SmartNákup</h1>
-            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>SmartNákup</h1>
+            <p style={{ margin: '4px 0 0', color: t.textSec, fontSize: 13 }}>
               Živé ceny z letákov
-              {cacheInfo && <span style={{ color: '#94a3b8', marginLeft: 8 }}>· cache pred {cacheInfo.ageMinutes} min</span>}
+              {cacheInfo && <span style={{ color: t.textMuted, marginLeft: 8 }}>· pred {cacheInfo.ageMinutes} min</span>}
             </p>
           </div>
-          {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo hamburger menu (prihlásený) */}
+          {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo menu (prihlásený) */}
           {!sessionLoading && (
             session
-              ? <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#475569' }}>☰</button>
-              : <button onClick={() => setScreen('login')} style={{ background: '#fff', border: '2px solid #2563eb', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>Prihlásiť sa</button>
+              ? <button onClick={() => setMenuOpen(true)} style={{
+                  width: 42, height: 42, borderRadius: '50%', background: t.surface, border: `1px solid ${t.border}`,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textSec,
+                }}><Menu size={19} strokeWidth={2} /></button>
+              : <button onClick={() => setScreen('login')} style={{
+                  background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: '9px 16px',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: t.accentInk, whiteSpace: 'nowrap', fontFamily: t.font,
+                }}>Prihlásiť sa</button>
           )}
         </div>
 
-        {/* Krok 1 */}
-        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>1 · Čo chceš kúpiť?</div>
+        {/* Vyhľadávanie + košík */}
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: t.shadowCard }}>
+          <SectionLabel>Čo chceš kúpiť?</SectionLabel>
           <TypeaheadInput onAdd={addItem} />
           {cartItems.length > 0 && (
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {cartItems.map(item => (
-                <span key={item.query} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#eff6ff', color: '#1d4ed8', padding: '8px 12px', borderRadius: 10, fontSize: 15, fontWeight: 500 }}>
-                  {item.imageUrl && <img src={item.imageUrl} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
-                  <span style={{ flex: 1 }}>{item.displayName}</span>
-                  <button onClick={() => { setCartItems(p => p.filter(i => i.query !== item.query)); setResult(null) }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#93c5fd', fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
-                </span>
-              ))}
+            <div style={{ marginTop: 14 }}>
+              <SectionLabel>V košíku · {cartItems.length} {cartItems.length === 1 ? 'položka' : cartItems.length < 5 ? 'položky' : 'položiek'}</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {cartItems.map(item => (
+                  <div key={item.query} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, background: t.surface2,
+                    border: `1px solid ${t.hairline}`, padding: '8px 12px', borderRadius: 12,
+                  }}>
+                    <ProductImg src={item.imageUrl} size={30} radius={8} />
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.displayName}</span>
+                    <button onClick={() => { setCartItems(p => p.filter(i => i.query !== item.query)); setResult(null) }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textFaint, padding: 2, display: 'flex' }}>
+                      <X size={16} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Krok 2 */}
-        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>2 · Do ktorých obchodov pôjdeš?</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {(() => {
-              const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
+        {/* Výber obchodov — mriežka: Všetky cez celú šírku, potom 2/riadok */}
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: t.shadowCard }}>
+          <SectionLabel>Obchody</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            <button onClick={() => { setSelectedNames(allSel ? [] : stores.map(s => s.name)); setResult(null) }} style={{
+              gridColumn: '1 / -1',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              padding: '11px 12px', borderRadius: 13,
+              border: `1.5px solid ${allSel ? t.accent : t.border}`,
+              background: allSel ? t.accentTileBg : 'transparent',
+              color: allSel ? t.accentInk : t.textMuted,
+              fontWeight: 700, cursor: 'pointer', fontSize: 13.5, fontFamily: t.font, transition: 'all 0.15s',
+            }}>
+              Všetky obchody
+              {allSel && <Check size={15} strokeWidth={2.6} />}
+            </button>
+            {stores.map(s => {
+              const sel = selectedNames.includes(s.name)
+              const b = storeBrand(s.name)
+              const ink = storeInk(s.name, t.isDark)
               return (
-                <>
-                  <button onClick={() => { setSelectedNames(allSel ? [] : stores.map(s => s.name)); setResult(null) }} style={{
-                    padding: '8px 15px', borderRadius: 10, border: '3px solid',
-                    borderColor: allSel ? '#2563eb' : '#e2e8f0',
-                    background: '#fff',
-                    color: allSel ? '#2563eb' : '#475569',
-                    fontWeight: 600, cursor: 'pointer', fontSize: 13,
-                  }}>Všetky</button>
-                  {stores.map(s => {
-                    const sel = selectedNames.includes(s.name)
-                    const c = col(s.name)
-                    return (
-                      <button key={s.name} onClick={() => {
-                        setSelectedNames(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name])
-                        setResult(null)
-                      }} style={{
-                        padding: '8px 15px', borderRadius: 10, border: '3px solid',
-                        borderColor: sel ? c.main : '#e2e8f0',
-                        background: '#fff',
-                        color: sel ? c.main : '#475569',
-                        fontWeight: 600, cursor: 'pointer', fontSize: 13, transition: 'all 0.12s',
-                      }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <StoreLogo name={s.name} size={18} />
-                          {s.name}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </>
+                <button key={s.name} onClick={() => {
+                  setSelectedNames(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name])
+                  setResult(null)
+                }} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', borderRadius: 13, minWidth: 0,
+                  border: `1.5px solid ${sel ? ink : t.border}`,
+                  background: sel ? `${b.main}${t.isDark ? '22' : '18'}` : 'transparent',
+                  color: sel ? ink : t.textMuted,
+                  fontWeight: 700, cursor: 'pointer', fontSize: 13.5, fontFamily: t.font, transition: 'all 0.15s',
+                }}>
+                  <StoreLogo name={s.name} size={22} muted={!sel} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{s.name}</span>
+                  {sel && <Check size={15} strokeWidth={2.6} style={{ flexShrink: 0 }} />}
+                </button>
               )
-            })()}
+            })}
           </div>
         </div>
 
         {/* CTA */}
         <button onClick={optimize} disabled={!cartItems.length || loading} style={{
-          width: '100%', padding: '15px', fontSize: 16, fontWeight: 700,
-          background: !cartItems.length ? '#cbd5e1' : '#2563eb',
-          color: '#fff', border: 'none', borderRadius: 14,
+          width: '100%', padding: '15px', fontSize: 16, fontWeight: 800, fontFamily: t.fontHead,
+          background: !cartItems.length ? t.ctaDisabledBg : t.accent,
+          color: !cartItems.length ? t.ctaDisabledText : t.accentOn,
+          border: 'none', borderRadius: 14,
           cursor: !cartItems.length ? 'not-allowed' : 'pointer',
           marginBottom: 20,
+          boxShadow: !cartItems.length ? 'none' : t.shadowCta,
         }}>
-          {loading ? '⏳ Hľadám najlepšie ceny...' : '🔍 Vytvoriť nákupné zoznamy'}
+          {loading ? 'Hľadám najlepšie ceny…' : 'Vytvoriť nákupné zoznamy'}
         </button>
 
-        {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 14, marginBottom: 14, color: '#b91c1c', fontSize: 13 }}>⚠️ {error}</div>}
+        {error && <div style={{ background: t.errorBg, border: `1px solid ${t.errorBorder}`, borderRadius: 12, padding: 14, marginBottom: 14, color: t.errorText, fontSize: 13 }}>{error}</div>}
 
         {/* Approval panel */}
         {pendingApprovals.length > 0 && (
-          <ApprovalPanel approvals={pendingApprovals} onDecide={approveAll} col={col} />
+          <ApprovalPanel approvals={pendingApprovals} onDecide={approveAll} />
         )}
 
         {result && (
@@ -1237,12 +1402,17 @@ export default function App() {
             {(() => {
               const totalSaving = result.stores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
               return totalSaving >= 0.01 ? (
-                <div style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '2px solid #86efac', borderRadius: 14, padding: '14px 18px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{
+                  background: t.savingBg, border: `1px solid ${t.savingBorder}`,
+                  borderLeft: t.savingStripe ? `3px solid ${t.savingStripe}` : `1px solid ${t.savingBorder}`,
+                  borderRadius: 16, padding: '15px 18px', marginBottom: 12,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
                   <div>
-                    <div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>🎉 Celková úspora</div>
-                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>oproti najdrahšiemu obchodu pre každú položku</div>
+                    <div style={{ fontWeight: 700, color: t.savingText, fontSize: 15, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Celková úspora</div>
+                    <div style={{ fontSize: 12, color: t.savingSub, marginTop: 2 }}>oproti najdrahšiemu obchodu pre každú položku</div>
                   </div>
-                  <div style={{ fontSize: 30, fontWeight: 900, color: '#15803d' }}>{totalSaving.toFixed(2)} €</div>
+                  <div style={{ fontSize: 30, fontWeight: 800, color: t.savingText, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{totalSaving.toFixed(2)} €</div>
                 </div>
               ) : null
             })()}
@@ -1250,25 +1420,35 @@ export default function App() {
               {result.stores.map(g => <ResultCard key={g.companyId} group={g} />)}
             </div>
             {result.unmatched.length > 0 && (
-              <div style={{ marginTop: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: 14, fontSize: 13 }}>
-                <strong style={{ color: '#92400e' }}>Nenájdené:</strong>
-                <span style={{ marginLeft: 8, color: '#78350f' }}>{result.unmatched.join(', ')}</span>
+              <div style={{ marginTop: 10, background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 12, padding: 14, fontSize: 13 }}>
+                <strong style={{ color: t.warnText }}>Nenájdené:</strong>
+                <span style={{ marginLeft: 8, color: t.warnText, opacity: 0.8 }}>{result.unmatched.join(', ')}</span>
               </div>
             )}
             {result.stores.length > 0 && (
               <button onClick={session ? saveResult : () => setScreen('login')} style={{
-                marginTop: 14, width: '100%', padding: '14px', fontSize: 15, fontWeight: 700,
-                background: session ? '#fff' : '#f1f5f9',
-                color: session ? '#2563eb' : '#94a3b8',
-                border: `2px solid ${session ? '#2563eb' : '#cbd5e1'}`,
+                marginTop: 14, width: '100%', padding: '14px', fontSize: 15, fontWeight: 800, fontFamily: t.fontHead,
+                background: 'transparent',
+                color: session ? t.accentInk : t.textMuted,
+                border: `1.5px solid ${session ? t.accent : t.border}`,
                 borderRadius: 14, cursor: 'pointer',
               }}>
-                {session ? '💾 Uložiť nákupné zoznamy' : '🔒 Prihlásiť sa pre uloženie zoznamov'}
+                {session ? 'Uložiť nákupné zoznamy' : 'Prihlásiť sa pre uloženie zoznamov'}
               </button>
             )}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+// ─── App (theme provider) ─────────────────────────────────────────────────────
+export default function App() {
+  const { mode, setMode, theme } = useThemeMode()
+  return (
+    <ThemeCtx.Provider value={{ t: theme, mode, setMode }}>
+      <AppInner />
+    </ThemeCtx.Provider>
   )
 }
