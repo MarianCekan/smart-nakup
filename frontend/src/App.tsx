@@ -551,8 +551,8 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
   const { t } = useT()
   // checked: Set of "companyId:query" keys
   const [checked, setChecked] = useState<Set<string>>(new Set())
-  // collapsed stores (manually toggled by user)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Explicitný open/close zámer používateľa (má prednosť pred auto-collapse). undefined = auto
+  const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({})
 
   const toggleItem = (companyId: string, query: string) => {
     const key = `${companyId}:${query}`
@@ -570,16 +570,12 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
 
   const allDone = list.stores.every(isStoreDone)
 
-  // Auto-collapse store when all its items get checked; auto-expand when one unchecked
-  const storeCollapsed = (store: SavedList['stores'][0]) =>
-    isStoreDone(store) || collapsed.has(store.companyId)
+  // Predvolene otvorené, dokončený obchod sa auto-zbalí — ale explicitný klik má vždy prednosť
+  const isStoreOpen = (store: SavedList['stores'][0]) =>
+    store.companyId in openOverride ? openOverride[store.companyId] : !isStoreDone(store)
 
-  const toggleCollapse = (companyId: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      if (next.has(companyId)) next.delete(companyId); else next.add(companyId)
-      return next
-    })
+  const toggleCollapse = (companyId: string, currentlyOpen: boolean) => {
+    setOpenOverride(prev => ({ ...prev, [companyId]: !currentlyOpen }))
   }
 
   return (
@@ -602,7 +598,7 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {list.stores.map(store => {
           const done = isStoreDone(store)
-          const open = !storeCollapsed(store)
+          const open = isStoreOpen(store)
           const ink = storeInk(store.storeName, t.isDark)
           return (
             <div key={store.companyId} style={{
@@ -611,7 +607,7 @@ function SavedListCard({ list, onDelete }: { list: SavedList; onDelete: () => vo
               background: done ? t.accentSoftBg : t.surface2,
             }}>
               <div
-                onClick={() => toggleCollapse(store.companyId)}
+                onClick={() => toggleCollapse(store.companyId, open)}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', cursor: 'pointer', userSelect: 'none' }}>
                 <StoreLogo name={store.storeName} size={20} />
                 <span style={{ fontWeight: 700, fontSize: 14, color: ink, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{store.storeName}</span>
@@ -1084,8 +1080,8 @@ function Drawer({ screen, session, onNavigate, onClose, onLogout }: {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: t.scrim }}>
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'absolute', top: 0, right: 0, bottom: 0, width: 280,
-        background: t.surface, boxShadow: t.shadowDrawer,
+        position: 'absolute', top: 12, right: 12, bottom: 12, width: 280,
+        background: t.surface, boxShadow: t.shadowDrawer, borderRadius: 28,
         display: 'flex', flexDirection: 'column', padding: 22, fontFamily: t.font,
       }}>
         {/* Profil */}
@@ -1165,12 +1161,16 @@ function AppInner() {
   const [result, setResult] = useState<OptimizeResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [cacheInfo, setCacheInfo] = useState<{ rawProducts: number; groups: number; ageMinutes: number } | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<NeedsApproval[]>([])
   const [pendingItems, setPendingItems] = useState<CartItem[]>([])
+  // Vstupné sekcie (vyhľadávanie + obchody) sa po vytvorení zoznamu zbalia, aby ušetrili miesto
+  const [inputsCollapsed, setInputsCollapsed] = useState(false)
 
   // Pozadie dokumentu (overscroll) podľa témy
   useEffect(() => { document.body.style.background = t.bg }, [t.bg])
+
+  // Prázdny košík → vstupné sekcie vždy rozbalené
+  useEffect(() => { if (cartItems.length === 0) setInputsCollapsed(false) }, [cartItems.length])
 
   const saveResult = async () => {
     if (!result) return
@@ -1195,7 +1195,6 @@ function AppInner() {
 
   useEffect(() => {
     api.stores().then(data => { setStores(data); setSelectedNames(data.map(s => s.name)) }).catch(() => {})
-    api.status().then(s => { if (s.ok) setCacheInfo(s) }).catch(() => {})
   }, [])
 
   const addItem = useCallback((item: CartItem) => {
@@ -1223,7 +1222,7 @@ function AppInner() {
     finally { setLoading(false) }
   }
 
-  const optimize = () => { if (cartItems.length) runOptimize(cartItems) }
+  const optimize = () => { if (cartItems.length) { setInputsCollapsed(true); runOptimize(cartItems) } }
 
   const approveAll = async (decisions: { approval: NeedsApproval; accepted: boolean }[]) => {
     const rejectedQueries = new Set(decisions.filter(d => !d.accepted).map(d => d.approval.originalQuery))
@@ -1287,15 +1286,13 @@ function AppInner() {
             onLogout={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} />
         )}
 
-        {/* Hlavička */}
-        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>SmartNákup</h1>
-            <p style={{ margin: '4px 0 0', color: t.textSec, fontSize: 13 }}>
-              Živé ceny z letákov
-              {cacheInfo && <span style={{ color: t.textMuted, marginLeft: 8 }}>· pred {cacheInfo.ageMinutes} min</span>}
-            </p>
-          </div>
+        {/* Hlavička — sticky */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 100, background: t.bg,
+          padding: '10px 0 14px', marginBottom: 10,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>SmartNákup</h1>
           {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo menu (prihlásený) */}
           {!sessionLoading && (
             session
@@ -1310,6 +1307,24 @@ function AppInner() {
           )}
         </div>
 
+        {/* Po vytvorení zoznamu sa vstupné sekcie zbalia do kompaktného pruhu */}
+        {inputsCollapsed ? (
+          <div onClick={() => setInputsCollapsed(false)} style={{
+            background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: '14px 18px',
+            marginBottom: 12, boxShadow: t.shadowCard, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Upraviť nákup</div>
+              <div style={{ fontSize: 12, color: t.textSec, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {cartItems.length} {cartItems.length === 1 ? 'položka' : cartItems.length < 5 ? 'položky' : 'položiek'}
+                {' · '}{allSel ? 'všetky obchody' : `${selectedNames.length} ${selectedNames.length === 1 ? 'obchod' : selectedNames.length < 5 ? 'obchody' : 'obchodov'}`}
+              </div>
+            </div>
+            <ChevronDown size={20} color={t.textMuted} style={{ flexShrink: 0 }} />
+          </div>
+        ) : (
+        <>
         {/* Vyhľadávanie + košík */}
         <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: t.shadowCard }}>
           <SectionLabel>Čo chceš kúpiť?</SectionLabel>
@@ -1376,6 +1391,8 @@ function AppInner() {
             })}
           </div>
         </div>
+        </>
+        )}
 
         {/* CTA */}
         <button onClick={optimize} disabled={!cartItems.length || loading} style={{
