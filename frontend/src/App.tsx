@@ -1327,7 +1327,16 @@ function AppInner() {
         <>
         {/* Vyhľadávanie + košík */}
         <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 20, marginBottom: 12, boxShadow: t.shadowCard }}>
-          <SectionLabel>Čo chceš kúpiť?</SectionLabel>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <SectionLabel>Čo chceš kúpiť?</SectionLabel>
+            {result && (
+              <button onClick={() => setInputsCollapsed(true)} title="Zbaliť" style={{
+                background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted,
+                display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600,
+                fontFamily: t.font, padding: 0, marginTop: -8,
+              }}>Zbaliť <ChevronUp size={16} /></button>
+            )}
+          </div>
           <TypeaheadInput onAdd={addItem} />
           {cartItems.length > 0 && (
             <div style={{ marginTop: 14 }}>
