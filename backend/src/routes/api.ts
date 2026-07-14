@@ -153,6 +153,94 @@ router.post('/recipes/check', async (req, res) => {
   res.json(results)
 })
 
+// ─── Plány podľa počtu obchodov ───────────────────────────────────────────────
+// Každá matchnutá položka nesie zoznam „eligible" obchodov (zvolené obchody, ktoré
+// produkt majú), zoradený od najlacnejšieho. Pre limit K obchodov hľadáme najlacnejšie
+// pokrytie CELÉHO zoznamu podmnožinou ≤K obchodov (bruteforce — max 8 obchodov, triviálne).
+type Matched = { query: string; group: any; eligible: any[] }
+const round2 = (n: number) => parseFloat(n.toFixed(2))
+
+function makePlanItem(m: Matched, chosen: any) {
+  const group = m.group
+  const worstPrice = group.worstPrice
+  const saving = worstPrice && worstPrice > chosen.price ? round2(worstPrice - chosen.price) : null
+  const norm = computeUnitPrice(chosen.price, group.packageSize, group.unit)
+  return {
+    query: m.query, name: chosen.productName ?? group.name, groupKey: group.groupKey,
+    packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice,
+    isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores,
+    promoFrom: chosen.validFrom ?? null, promoUntil: chosen.validUntil ?? null,
+    saving, worstStore: group.worstStore ?? null, normPrice: norm?.value ?? null, normUnit: norm?.label ?? null,
+  }
+}
+
+function groupAssignments(assign: { m: Matched; chosen: any }[]) {
+  const map = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
+  for (const { m, chosen } of assign) {
+    if (!map.has(chosen.companyId)) map.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
+    const g = map.get(chosen.companyId)!
+    g.items.push(makePlanItem(m, chosen))
+    g.subtotal = round2(g.subtotal + chosen.price)
+  }
+  return Array.from(map.values()).sort((a, b) => b.subtotal - a.subtotal)
+}
+
+// Všetky podmnožiny veľkosti 1..k
+function subsetsUpTo(arr: string[], k: number): string[][] {
+  const res: string[][] = []
+  const maxK = Math.min(k, arr.length)
+  const rec = (start: number, cur: string[]) => {
+    if (cur.length) res.push([...cur])
+    if (cur.length === maxK) return
+    for (let i = start; i < arr.length; i++) rec(i + 1, [...cur, arr[i]])
+  }
+  rec(0, [])
+  return res
+}
+
+// Najlacnejšie pokrytie celého zoznamu ≤k obchodmi, alebo null ak sa to nedá
+function bestFullCover(matched: Matched[], k: number): { m: Matched; chosen: any }[] | null {
+  const universe = [...new Set(matched.flatMap(m => m.eligible.map((s: any) => s.companyId)))]
+  let best: { assign: { m: Matched; chosen: any }[]; total: number } | null = null
+  for (const subset of subsetsUpTo(universe, k)) {
+    const set = new Set(subset)
+    const assign: { m: Matched; chosen: any }[] = []
+    let total = 0, ok = true
+    for (const m of matched) {
+      const opt = m.eligible.find((s: any) => set.has(s.companyId)) // eligible je zoradené vzostupne
+      if (!opt) { ok = false; break }
+      assign.push({ m, chosen: opt }); total += opt.price
+    }
+    if (ok && (!best || total < best.total)) best = { assign, total }
+  }
+  return best ? best.assign : null
+}
+
+const sigOf = (assign: { chosen: any }[]) => [...new Set(assign.map(a => a.chosen.companyId))].sort().join(',')
+const planFrom = (key: string, label: string, assign: { m: Matched; chosen: any }[]) => ({
+  key, label,
+  storeCount: new Set(assign.map(a => a.chosen.companyId)).size,
+  total: round2(assign.reduce((s, a) => s + a.chosen.price, 0)),
+  stores: groupAssignments(assign),
+})
+
+// Vráti zoznam plánov: najlacnejší (bez limitu) + varianty 1/2/3 obchody, ktoré sa líšia
+function computePlans(matched: Matched[]) {
+  if (!matched.length) return []
+  const bestAssign = matched.map(m => ({ m, chosen: m.eligible[0] })) // najlacnejší obchod na položku
+  const plans = [planFrom('best', 'Najnižšia cena', bestAssign)]
+  const seen = new Set([sigOf(bestAssign)])
+  for (const k of [1, 2, 3]) {
+    const assign = bestFullCover(matched, k)
+    if (!assign) continue
+    const sig = sigOf(assign)
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    plans.push(planFrom(`k${k}`, k === 1 ? '1 obchod' : `Max ${k} obchody`, assign))
+  }
+  return plans.sort((a, b) => a.total - b.total || a.storeCount - b.storeCount)
+}
+
 const OptimizeSchema = z.object({
   items: z.array(z.object({ query: z.string().min(1), groupKey: z.string().optional() })).min(1).max(50),
   company_ids: z.array(z.string()).optional().default([]),
@@ -169,7 +257,7 @@ router.post('/optimize', async (req, res) => {
   try {
     // LEN KOMPAS — filtrujeme priamo podľa zvolených company_ids (prázdne = všetky obchody)
     const allowedAll = company_ids
-    const kompasStoreMap = new Map<string, { storeName: string; companyId: string; items: any[]; subtotal: number }>()
+    const matched: Matched[] = []
     const kompasUnmatched: string[] = []
     const needsApproval: any[] = []
 
@@ -234,27 +322,19 @@ router.post('/optimize', async (req, res) => {
         continue
       }
 
-      const chosen = eligible[0]
-      console.log(`🛒 kompas optimize "${group.name}": chosen ${chosen.storeName}:${chosen.price}`)
-      if (!kompasStoreMap.has(chosen.companyId)) {
-        kompasStoreMap.set(chosen.companyId, { storeName: chosen.storeName, companyId: chosen.companyId, items: [], subtotal: 0 })
-      }
-      const grp = kompasStoreMap.get(chosen.companyId)!
-      const worstPrice = group.worstPrice
-      const saving = worstPrice && worstPrice > chosen.price ? parseFloat((worstPrice - chosen.price).toFixed(2)) : null
-      const itemNorm = computeUnitPrice(chosen.price, group.packageSize, group.unit)
-      grp.items.push({ query: item.query, name: (chosen as any).productName ?? group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null, normPrice: itemNorm?.value ?? null, normUnit: itemNorm?.label ?? null })
-      grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
+      // Položka je matchnutá — všetky eligible obchody si necháme pre výpočet plánov
+      matched.push({ query: item.query, group, eligible })
     }
 
-    const allStores = Array.from(kompasStoreMap.values()).sort((a, b) => b.subtotal - a.subtotal)
-    const total_optimized = parseFloat(allStores.reduce((s, g) => s + g.subtotal, 0).toFixed(2))
-    const total_worst = total_optimized // kompas má len jednu cenu → žiadna úspora
+    // Plány podľa počtu obchodov (najlacnejší + varianty 1/2/3 obchody)
+    const plans = computePlans(matched)
+    const defaultPlan = plans[0]  // najlacnejší = predvolený
 
     res.json({
-      stores: allStores,
-      total_optimized,
-      total_worst,
+      plans,
+      stores: defaultPlan?.stores ?? [],
+      total_optimized: defaultPlan?.total ?? 0,
+      total_worst: defaultPlan?.total ?? 0,
       total_saving: 0,
       unmatched: kompasUnmatched,
       needsApproval,

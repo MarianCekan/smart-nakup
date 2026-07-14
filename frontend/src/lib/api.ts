@@ -57,30 +57,41 @@ export type NeedsApproval = {
   }
 }
 
-export type OptimizeResult = {
-  stores: {
-    storeName: string
-    companyId: string
-    items: {
-      query: string
-      name: string
-      groupKey: string
-      packageSize: number
-      unit: string
-      price: number
-      unitPrice: number
-      isPromo: boolean
-      imageUrl: string | null
-      allStores: StorePrice[]
-      promoFrom?: string | null
-      promoUntil?: string | null
-      saving?: number | null
-      worstStore?: string | null
-      normPrice?: number | null
-      normUnit?: 'kg' | 'l' | null
-    }[]
-    subtotal: number
+export type StoreGroup = {
+  storeName: string
+  companyId: string
+  items: {
+    query: string
+    name: string
+    groupKey: string
+    packageSize: number
+    unit: string
+    price: number
+    unitPrice: number
+    isPromo: boolean
+    imageUrl: string | null
+    allStores: StorePrice[]
+    promoFrom?: string | null
+    promoUntil?: string | null
+    saving?: number | null
+    worstStore?: string | null
+    normPrice?: number | null
+    normUnit?: 'kg' | 'l' | null
   }[]
+  subtotal: number
+}
+
+export type Plan = {
+  key: string
+  label: string
+  storeCount: number
+  total: number
+  stores: StoreGroup[]
+}
+
+export type OptimizeResult = {
+  plans?: Plan[]
+  stores: StoreGroup[]
   total_optimized: number
   total_worst: number
   total_saving: number

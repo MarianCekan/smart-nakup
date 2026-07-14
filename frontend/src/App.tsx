@@ -3,7 +3,7 @@ import {
   Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Heart, Repeat2,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
 } from 'lucide-react'
-import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto } from './lib/api'
+import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
 import { authClient } from './lib/authClient'
 import { Theme, ThemeMode, useThemeMode, storeBrand, storeInk } from './theme'
@@ -416,74 +416,45 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
   )
 }
 
-// ─── StoreComparisonTable ─────────────────────────────────────────────────────
-// Koľko by celý zoznam stál v JEDNOM obchode (len tie, ktoré majú úplne všetko),
-// oproti rozdelenému nákupu. Zámerne vynechávame obchody čo majú len časť zoznamu —
-// tie nie sú reálna alternatíva "choď na jedno miesto", len by mätili poradie.
-function buildStoreComparison(result: OptimizeResult, stores: Store[], selectedNames: string[]) {
-  const items = result.stores.flatMap(s => s.items)
-  if (!items.length) return []
-  const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
-  const allowedIds = allSel ? null : new Set(stores.filter(s => selectedNames.includes(s.name)).flatMap(s => s.companyIds))
-  const perStore = new Map<string, { storeName: string; companyId: string; total: number; count: number }>()
-  for (const item of items) {
-    for (const s of item.allStores) {
-      if (allowedIds && !allowedIds.has(s.companyId)) continue
-      const e = perStore.get(s.companyId) ?? { storeName: s.storeName, companyId: s.companyId, total: 0, count: 0 }
-      e.total += s.price
-      e.count += 1
-      perStore.set(s.companyId, e)
-    }
-  }
-  return [...perStore.values()]
-    .filter(e => e.count === items.length)  // len obchody čo majú ÚPLNE všetko
-    .map(e => ({ storeName: e.storeName, companyId: e.companyId, total: parseFloat(e.total.toFixed(2)) }))
-    .sort((a, b) => a.total - b.total)
-}
-
-function StoreComparisonTable({ result, stores, selectedNames }: { result: OptimizeResult; stores: Store[]; selectedNames: string[] }) {
+// ─── PlanSelector ─────────────────────────────────────────────────────────────
+// Prepínač medzi plánmi nákupu podľa počtu obchodov (Najnižšia cena / Max 2 / 1 obchod…).
+// Zobrazí sa len keď backend vráti aspoň 2 rôzne plány.
+function PlanSelector({ plans, selectedKey, onSelect }: { plans: Plan[]; selectedKey: string; onSelect: (key: string) => void }) {
   const { t } = useT()
-  const [open, setOpen] = useState(false)
-  const rows = buildStoreComparison(result, stores, selectedNames)
-  const splitTotal = parseFloat(result.stores.reduce((s, g) => s + g.subtotal, 0).toFixed(2))
-
-  // Nič na porovnanie: žiadny obchod nemá celý zoznam, alebo by to vyšlo rovnako ako rozdelený nákup
-  if (rows.length === 0 || rows[0].total <= splitTotal + 0.009) return null
-  const cheapestTotal = rows[0].total
-
+  if (plans.length < 2) return null
+  const cheapest = plans[0]?.total ?? 0
   return (
-    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, marginBottom: 12, boxShadow: t.shadowCard, overflow: 'hidden' }}>
-      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Oplatí sa rozdeliť nákup</div>
-          <div style={{ fontSize: 12, color: t.textSec, marginTop: 2 }}>
-            Všetko v jednom obchode: od <strong>{cheapestTotal.toFixed(2)} €</strong> · rozdelene ušetríš <strong style={{ color: t.accentInk }}>{(cheapestTotal - splitTotal).toFixed(2)} €</strong>
-          </div>
-        </div>
-        <span style={{ color: t.textMuted, display: 'flex' }}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
-      </div>
-      {open && (
-        <div style={{ borderTop: `1px solid ${t.hairline}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: t.accentSoftBg, borderBottom: `1px solid ${t.hairline}` }}>
-            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.accentSoftText }}>Rozdelene (odporúčame)</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: t.accentInk, fontFamily: t.fontHead }}>{splitTotal.toFixed(2)} €</span>
-          </div>
-          <div style={{ padding: '6px 16px 2px', fontSize: 11, color: t.textMuted }}>Celý zoznam len v jednom obchode:</div>
-          {rows.map((r, i) => {
-            const ink = storeInk(r.storeName, t.isDark)
-            return (
-              <div key={r.companyId} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
-                borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : 'none',
-              }}>
-                <StoreLogo name={r.storeName} size={20} />
-                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: ink }}>{r.storeName}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead }}>{r.total.toFixed(2)} €</span>
+    <div style={{ marginBottom: 12 }}>
+      <SectionLabel>Ako chceš nakúpiť?</SectionLabel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {plans.map(p => {
+          const active = p.key === selectedKey
+          const extra = p.total - cheapest
+          return (
+            <button key={p.key} onClick={() => onSelect(p.key)} style={{
+              display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer',
+              background: active ? t.accentSoftBg : t.surface,
+              border: `1.5px solid ${active ? t.accent : t.border}`,
+              borderRadius: 14, padding: '12px 14px', fontFamily: t.font, transition: 'all 0.12s',
+            }}>
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                border: `2px solid ${active ? t.accent : t.textFaint}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{active && <div style={{ width: 9, height: 9, borderRadius: '50%', background: t.accent }} />}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: active ? t.accentSoftText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{p.label}</div>
+                <div style={{ fontSize: 12, color: t.textSec, marginTop: 1 }}>
+                  {p.storeCount} {p.storeCount === 1 ? 'obchod' : p.storeCount < 5 ? 'obchody' : 'obchodov'}
+                  {extra > 0.009 && <span style={{ color: t.textMuted }}> · +{extra.toFixed(2)} € oproti najlacnejšej</span>}
+                  {extra <= 0.009 && <span style={{ color: t.accentInk }}> · najlacnejšie</span>}
+                </div>
               </div>
-            )
-          })}
-        </div>
-      )}
+              <div style={{ fontSize: 17, fontWeight: 800, color: active ? t.accentInk : t.text, fontFamily: t.fontHead, flexShrink: 0 }}>{p.total.toFixed(2)} €</div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1345,6 +1316,8 @@ function AppInner() {
   // Vstupné sekcie (vyhľadávanie + obchody) sa po vytvorení zoznamu zbalia, aby ušetrili miesto
   const [inputsCollapsed, setInputsCollapsed] = useState(false)
   const [favorites, setFavorites] = useState<FavoriteDto[]>([])
+  // Zvolený plán nákupu (podľa počtu obchodov). Prázdny = predvolený (najlacnejší).
+  const [planKey, setPlanKey] = useState<string>('')
 
   // Pozadie dokumentu (overscroll) podľa témy
   useEffect(() => { document.body.style.background = t.bg }, [t.bg])
@@ -1372,14 +1345,17 @@ function AppInner() {
   // Prázdny košík → vstupné sekcie vždy rozbalené
   useEffect(() => { if (cartItems.length === 0) setInputsCollapsed(false) }, [cartItems.length])
 
+  // Obchody podľa zvoleného plánu (fallback na predvolené result.stores)
+  const displayStores = (result?.plans?.find(p => p.key === planKey)?.stores) ?? result?.stores ?? []
+
   const saveResult = async () => {
     if (!result) return
-    const storeNames = result.stores
+    const storeNames = [...displayStores]
       .sort((a, b) => b.items.length - a.items.length)
       .map(s => s.storeName)
     const name = `${formatDate(new Date())} - ${storeNames.join(', ')}`
     try {
-      await api.saveList(name, result.stores, result.unmatched)
+      await api.saveList(name, displayStores, result.unmatched)
     } catch {
       setError('Zoznam sa nepodarilo uložiť — skús znova')
       return
@@ -1409,6 +1385,7 @@ function AppInner() {
         ? []
         : stores.filter(s => selectedNames.includes(s.name)).flatMap(s => s.companyIds)
       const res = await api.optimize(items.map(i => ({ query: i.query, groupKey: i.groupKey })), company_ids)
+      setPlanKey(res.plans?.[0]?.key ?? '')  // predvolene najlacnejší plán
       if (res.needsApproval.length > 0) {
         setPendingApprovals(res.needsApproval)
         setPendingItems(items)
@@ -1654,8 +1631,11 @@ function AppInner() {
 
         {result && (
           <div>
+            {result.plans && result.plans.length >= 2 && (
+              <PlanSelector plans={result.plans} selectedKey={planKey} onSelect={setPlanKey} />
+            )}
             {(() => {
-              const totalSaving = result.stores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
+              const totalSaving = displayStores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
               return totalSaving >= 0.01 ? (
                 <div style={{
                   background: t.savingBg, border: `1px solid ${t.savingBorder}`,
@@ -1671,9 +1651,8 @@ function AppInner() {
                 </div>
               ) : null
             })()}
-            <StoreComparisonTable result={result} stores={stores} selectedNames={selectedNames} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {result.stores.map(g => <ResultCard key={g.companyId} group={g} />)}
+              {displayStores.map(g => <ResultCard key={g.companyId} group={g} />)}
             </div>
             {result.unmatched.length > 0 && (
               <div style={{ marginTop: 10, background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 12, padding: 14, fontSize: 13 }}>
@@ -1681,7 +1660,7 @@ function AppInner() {
                 <span style={{ marginLeft: 8, color: t.warnText, opacity: 0.8 }}>{result.unmatched.join(', ')}</span>
               </div>
             )}
-            {result.stores.length > 0 && (
+            {displayStores.length > 0 && (
               <button onClick={session ? saveResult : () => setScreen('login')} style={{
                 marginTop: 14, width: '100%', padding: '14px', fontSize: 15, fontWeight: 800, fontFamily: t.fontHead,
                 background: 'transparent',
