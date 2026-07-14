@@ -284,38 +284,34 @@ router.post('/optimize', async (req, res) => {
       ).sort((a: any, b: any) => a.price - b.price)
 
       if (!eligible.length) {
-        // Vybraný produkt nie je vo zvolených obchodoch — navrhni najlacnejšiu
-        // alternatívu z TEJ ISTEJ kategórie (napr. Clever cibuľa → Cibuľa žltá vo Fresh).
-        // User ju musí potvrdiť v ApprovalPanel-i.
+        // Vybraný produkt nie je vo zvolených obchodoch — ponúkni VIAC náhrad z tej istej
+        // kategórie (aj drahšie), s cenou, nech si user vyberie sám v ApprovalPanel-i.
+        const isAllowed = (id: string) => allowedAll.length === 0 || allowedAll.includes(id)
         const slug = group.groupKey.split(':')[1]
         const siblings = slug ? await getKompasCategoryGroups(slug).catch(() => []) : []
-        let alt: { g: any; s: any } | null = null
+        const opts: { g: any; s: any }[] = []
         for (const sib of siblings) {
           if (sib.groupKey === group.groupKey) continue
+          // najlacnejší obchod daného náhradného produktu spomedzi zvolených
+          let best: any = null
           for (const st of sib.stores) {
-            if (!allowedAll.includes(st.companyId)) continue
-            if (!alt || st.price < alt.s.price) alt = { g: sib, s: st }
+            if (!isAllowed(st.companyId)) continue
+            if (!best || st.price < best.price) best = st
           }
+          if (best) opts.push({ g: sib, s: best })
         }
-        if (alt) {
-          const altNorm = computeUnitPrice(alt.s.price, alt.g.packageSize, alt.g.unit)
-          needsApproval.push({
-            originalQuery: item.query,
-            originalGroupKey: group.groupKey,
-            suggested: {
-              groupKey: alt.g.groupKey,
-              name: alt.g.name,
-              unit: alt.g.unit,
-              packageSize: alt.g.packageSize,
-              imageUrl: alt.s.imageUrl ?? alt.g.bestImageUrl,
-              price: alt.s.price,
-              unitPrice: alt.s.unitPrice,
-              storeName: alt.s.storeName,
-              isPromo: true,
-              normPrice: altNorm?.value ?? null,
-              normUnit: altNorm?.label ?? null,
-            },
-          })
+        opts.sort((a, b) => a.s.price - b.s.price)
+        const suggestions = opts.slice(0, 4).map(({ g, s }) => {
+          const norm = computeUnitPrice(s.price, g.packageSize, g.unit)
+          return {
+            groupKey: g.groupKey, name: g.name, unit: g.unit, packageSize: g.packageSize,
+            imageUrl: s.imageUrl ?? g.bestImageUrl, price: s.price, unitPrice: s.unitPrice,
+            storeName: s.storeName, isPromo: true,
+            normPrice: norm?.value ?? null, normUnit: norm?.label ?? null,
+          }
+        })
+        if (suggestions.length) {
+          needsApproval.push({ originalQuery: item.query, originalGroupKey: group.groupKey, suggestions })
           continue
         }
         kompasUnmatched.push(item.query)

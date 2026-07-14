@@ -460,122 +460,92 @@ function PlanSelector({ plans, selectedKey, onSelect }: { plans: Plan[]; selecte
 }
 
 // ─── ApprovalPanel ────────────────────────────────────────────────────────────
-type Toast = { query: string; originalQuery: string; name: string }
+// Pre produkty, ktoré nie sú v zvolených obchodoch, ponúkame VÝBER z viacerých náhrad
+// (aj drahších) — s cenou a €/kg, nech sa user rozhodne sám. Alebo „bez náhrady".
+const NONE = '__none__'
 
 function ApprovalPanel({
   approvals,
   onDecide,
 }: {
   approvals: NeedsApproval[]
-  onDecide: (decisions: { approval: NeedsApproval; accepted: boolean }[]) => void
+  onDecide: (decisions: { originalQuery: string; chosenGroupKey: string | null }[]) => void
 }) {
   const { t } = useT()
-  const [accepted, setAccepted] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(approvals.map(a => [a.originalQuery, true]))
+  // Predvolene vybraná najlacnejšia náhrada (suggestions sú zoradené vzostupne)
+  const [choice, setChoice] = useState<Record<string, string>>(() =>
+    Object.fromEntries(approvals.map(a => [a.originalQuery, a.suggestions[0]?.groupKey ?? NONE]))
   )
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const timerRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  const removeToast = (query: string) =>
-    setToasts(prev => prev.filter(tt => tt.query !== query))
-
-  const reject = (query: string, name: string) => {
-    setAccepted(prev => ({ ...prev, [query]: false }))
-    setToasts(prev => [...prev.filter(tt => tt.query !== query), { query, originalQuery: query, name }])
-    if (timerRefs.current[query]) clearTimeout(timerRefs.current[query])
-    timerRefs.current[query] = setTimeout(() => removeToast(query), 5000)
-  }
-
-  const undo = (query: string) => {
-    if (timerRefs.current[query]) clearTimeout(timerRefs.current[query])
-    setAccepted(prev => ({ ...prev, [query]: true }))
-    removeToast(query)
-  }
-
-  const confirm = () => {
-    Object.values(timerRefs.current).forEach(clearTimeout)
-    onDecide(approvals.map(a => ({ approval: a, accepted: accepted[a.originalQuery] })))
-  }
-
-  const visible = approvals.filter(a => accepted[a.originalQuery])
+  const confirm = () => onDecide(approvals.map(a => ({
+    originalQuery: a.originalQuery,
+    chosenGroupKey: choice[a.originalQuery] === NONE ? null : choice[a.originalQuery],
+  })))
 
   return (
     <div style={{ marginBottom: 16, fontFamily: t.font }}>
-      {/* Stacked toasts */}
-      {toasts.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-          {toasts.map(tt => (
-            <div key={tt.query} style={{
-              background: t.tooltipBg, color: t.tooltipText, borderRadius: 14, padding: '12px 16px',
-              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-              fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            }}>
-              <div>
-                <div>„{tt.name}" odstránené zo zoznamu</div>
-                <div style={{ fontSize: 12, opacity: 0.65, marginTop: 3 }}>
-                  Produkt nie je dostupný vo zvolených obchodoch — zvážte pridanie ďalšieho obchodu
-                </div>
-              </div>
-              <button onClick={() => undo(tt.query)} style={{
-                background: t.tooltipText, color: t.tooltipBg, border: 'none', borderRadius: 8,
-                padding: '5px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 13,
-                marginLeft: 14, flexShrink: 0, fontFamily: t.font,
-              }}>Späť</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Panel */}
       <div style={{ background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 18, padding: 18 }}>
         <div style={{ fontWeight: 700, color: t.warnText, fontSize: 14, marginBottom: 4, fontFamily: t.fontHead }}>
           Niektoré produkty nie sú v tvojich obchodoch
         </div>
-        <div style={{ fontSize: 13, color: t.warnText, opacity: 0.8, marginBottom: 14 }}>
-          Našli sme alternatívy — zamietnuť ich môžeš krížikom
+        <div style={{ fontSize: 13, color: t.warnText, opacity: 0.85, marginBottom: 14 }}>
+          Vyber náhradu — cena je len orientačná, rozhodnutie je na tebe.
         </div>
 
-        {visible.length === 0 && (
-          <div style={{ fontSize: 13, color: t.warnText, textAlign: 'center', padding: '10px 0' }}>
-            Všetky náhrady zamietnuté
-          </div>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {visible.map(a => {
-            const s = a.suggested
-            const ink = storeInk(s.storeName, t.isDark)
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {approvals.map(a => {
+            const selected = choice[a.originalQuery]
+            const cheapest = a.suggestions[0]?.price ?? 0
             return (
-              <div key={a.originalQuery} style={{
-                background: t.surface, borderRadius: 14, padding: '12px 14px',
-                border: `1px solid ${t.border}`,
-                display: 'flex', alignItems: 'center', gap: 12,
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, color: t.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Hľadaný</div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: t.text }}>„{a.originalQuery}"</div>
-                  <div style={{ fontSize: 12, color: t.errorText }}>Nie je v zvolených obchodoch</div>
+              <div key={a.originalQuery} style={{ background: t.surface, borderRadius: 14, padding: 14, border: `1px solid ${t.border}` }}>
+                <div style={{ fontSize: 13, color: t.textSec, marginBottom: 10 }}>
+                  Pre <strong style={{ color: t.text }}>„{a.originalQuery}"</strong> sme nenašli presnú zhodu. Náhrada:
                 </div>
-
-                <div style={{ color: t.textFaint, fontSize: 18, flexShrink: 0 }}>→</div>
-
-                <div style={{ flex: 2, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <ProductImg src={s.imageUrl} size={44} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                    <div style={{ fontSize: 12, color: t.textSec }}>
-                      {s.packageSize > 0 ? `${s.packageSize}${s.unit} · ` : ''}<strong style={{ color: t.accentInk }}>{s.price.toFixed(2)} €</strong>
-                    </div>
-                    <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: `${storeBrand(s.storeName).main}${t.isDark ? '22' : '18'}`, color: ink, fontWeight: 700 }}>{s.storeName}</span>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {a.suggestions.map(s => {
+                    const active = selected === s.groupKey
+                    const ink = storeInk(s.storeName, t.isDark)
+                    const extra = s.price - cheapest
+                    return (
+                      <button key={s.groupKey} onClick={() => setChoice(prev => ({ ...prev, [a.originalQuery]: s.groupKey }))} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer',
+                        background: active ? t.accentSoftBg : 'transparent',
+                        border: `1.5px solid ${active ? t.accent : t.border}`,
+                        borderRadius: 12, padding: '9px 11px', fontFamily: t.font, transition: 'all 0.12s',
+                      }}>
+                        <div style={{
+                          width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                          border: `2px solid ${active ? t.accent : t.textFaint}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>{active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.accent }} />}</div>
+                        <ProductImg src={s.imageUrl} size={38} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
+                          <div style={{ fontSize: 11.5, color: t.textSec, marginTop: 1, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ padding: '1px 7px', borderRadius: 999, background: `${storeBrand(s.storeName).main}${t.isDark ? '22' : '18'}`, color: ink, fontWeight: 700 }}>{s.storeName}</span>
+                            {s.normPrice && s.normUnit && <span style={{ color: t.textMuted }}>{s.normPrice.toFixed(2)} €/{s.normUnit}</span>}
+                            {extra > 0.009 && <span style={{ color: t.textMuted }}>+{extra.toFixed(2)} €</span>}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: active ? t.accentInk : t.text, fontFamily: t.fontHead, flexShrink: 0 }}>{s.price.toFixed(2)} €</div>
+                      </button>
+                    )
+                  })}
+                  {/* Bez náhrady */}
+                  <button onClick={() => setChoice(prev => ({ ...prev, [a.originalQuery]: NONE }))} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer',
+                    background: selected === NONE ? t.surface2 : 'transparent',
+                    border: `1.5px solid ${selected === NONE ? t.textMuted : t.border}`,
+                    borderRadius: 12, padding: '9px 11px', fontFamily: t.font,
+                  }}>
+                    <div style={{
+                      width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+                      border: `2px solid ${selected === NONE ? t.textMuted : t.textFaint}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{selected === NONE && <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.textMuted }} />}</div>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: t.textSec }}>Bez náhrady (odobrať položku)</span>
+                  </button>
                 </div>
-
-                <button onClick={() => reject(a.originalQuery, s.name)} style={{
-                  flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
-                  border: `1px solid ${t.promoBorder}`, background: t.promoBg,
-                  color: t.promoText, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><X size={15} strokeWidth={2.4} /></button>
               </div>
             )
           })}
@@ -1401,17 +1371,16 @@ function AppInner() {
 
   const optimize = () => { if (cartItems.length) { setInputsCollapsed(true); runOptimize(cartItems) } }
 
-  const approveAll = async (decisions: { approval: NeedsApproval; accepted: boolean }[]) => {
-    const rejectedQueries = new Set(decisions.filter(d => !d.accepted).map(d => d.approval.originalQuery))
-    const approvedMap = new Map(decisions.filter(d => d.accepted).map(d => [d.approval.originalQuery, d.approval]))
+  const approveAll = async (decisions: { originalQuery: string; chosenGroupKey: string | null }[]) => {
+    const rejectedQueries = new Set(decisions.filter(d => !d.chosenGroupKey).map(d => d.originalQuery))
+    const chosenMap = new Map(decisions.filter(d => d.chosenGroupKey).map(d => [d.originalQuery, d.chosenGroupKey!]))
 
     // Vychádza z aktuálnych cartItems (rešpektuje odobrané položky počas approval)
     const newItems = cartItems
       .filter(i => !rejectedQueries.has(i.query))
       .map(i => {
-        const approval = approvedMap.get(i.query)
-        if (approval) return { ...i, groupKey: approval.suggested.groupKey }
-        return i
+        const gk = chosenMap.get(i.query)
+        return gk ? { ...i, groupKey: gk } : i
       })
 
     if (rejectedQueries.size > 0) setCartItems(prev => prev.filter(i => !rejectedQueries.has(i.query)))

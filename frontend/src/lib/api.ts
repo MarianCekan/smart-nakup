@@ -39,22 +39,24 @@ export type StorePrice = {
   imageUrl: string | null
 }
 
+export type Suggestion = {
+  groupKey: string
+  name: string
+  unit: string
+  packageSize: number
+  imageUrl: string | null
+  price: number
+  unitPrice: number
+  storeName: string
+  isPromo: boolean
+  normPrice?: number | null
+  normUnit?: 'kg' | 'l' | null
+}
+
 export type NeedsApproval = {
   originalQuery: string
   originalGroupKey?: string
-  suggested: {
-    groupKey: string
-    name: string
-    unit: string
-    packageSize: number
-    imageUrl: string | null
-    price: number
-    unitPrice: number
-    storeName: string
-    isPromo: boolean
-    normPrice?: number | null
-    normUnit?: 'kg' | 'l' | null
-  }
+  suggestions: Suggestion[]
 }
 
 export type StoreGroup = {
