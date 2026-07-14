@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
 import {
-  Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus,
+  Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Heart, Repeat2,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
 } from 'lucide-react'
-import { api, Store, ProductHit, OptimizeResult, NeedsApproval } from './lib/api'
+import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
 import { authClient } from './lib/authClient'
 import { Theme, ThemeMode, useThemeMode, storeBrand, storeInk } from './theme'
@@ -24,6 +24,12 @@ function promoDateLabel(from?: string | null, until?: string | null): { text: st
   if (from && until) return { text: `${fmtDate(from)} – ${fmtDate(until)}`, upcoming }
   if (until) return { text: `do ${fmtDate(until)}`, upcoming: false }
   return null
+}
+
+// Cena za jednotku — "3.00 €/kg", aby sa dali férovo porovnať rôzne balenia
+function formatNormPrice(normPrice?: number | null, normUnit?: 'kg' | 'l' | null): string | null {
+  if (!normPrice || !normUnit) return null
+  return `${normPrice.toFixed(2)} €/${normUnit}`
 }
 
 function PromoBadge({ from, until }: { from?: string | null; until?: string | null }) {
@@ -305,6 +311,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                   <div style={{ fontSize: 12, color: t.textSec, fontFamily: t.font }}>
                     {hit.packageSize > 0 && `${hit.packageSize}${hit.unit} · `}
                     od <strong style={{ color: t.accentInk }}>{hit.bestPrice.toFixed(2)} €</strong>
+                    {formatNormPrice(hit.normPrice, hit.normUnit) && <span style={{ color: t.textMuted, marginLeft: 4 }}>({formatNormPrice(hit.normPrice, hit.normUnit)})</span>}
                     {hit.saving && hit.saving > 0 && <span style={{ marginLeft: 6, fontSize: 11, color: t.accentInk, fontWeight: 600 }}>−{hit.saving.toFixed(2)} € vs {hit.worstStore}</span>}
                   </div>
                 </div>
@@ -376,6 +383,9 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontWeight: 800, color: ink, fontSize: 17, fontFamily: t.fontHead }}>{item.price.toFixed(2)} €</div>
+              {formatNormPrice(item.normPrice, item.normUnit) && (
+                <div style={{ fontSize: 11, color: t.textMuted, fontFamily: t.font }}>{formatNormPrice(item.normPrice, item.normUnit)}</div>
+              )}
               {(item as any).saving > 0 && (
                 <div style={{ fontSize: 11, color: t.accentInk, fontWeight: 600, marginTop: 1, fontFamily: t.font }}>
                   ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
@@ -402,6 +412,78 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─── StoreComparisonTable ─────────────────────────────────────────────────────
+// Čo by celý nákup stál, keby si všetko kúpil v jednom obchode — porovnanie oproti
+// rozdelenému nákupu. Počíta sa z už načítaných allStores na položkách, žiadny extra fetch.
+function buildStoreComparison(result: OptimizeResult, stores: Store[], selectedNames: string[]) {
+  const items = result.stores.flatMap(s => s.items)
+  if (!items.length) return []
+  const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
+  const allowedIds = allSel ? null : new Set(stores.filter(s => selectedNames.includes(s.name)).flatMap(s => s.companyIds))
+  const perStore = new Map<string, { storeName: string; companyId: string; total: number; count: number }>()
+  for (const item of items) {
+    for (const s of item.allStores) {
+      if (allowedIds && !allowedIds.has(s.companyId)) continue
+      const e = perStore.get(s.companyId) ?? { storeName: s.storeName, companyId: s.companyId, total: 0, count: 0 }
+      e.total += s.price
+      e.count += 1
+      perStore.set(s.companyId, e)
+    }
+  }
+  return [...perStore.values()]
+    .map(e => ({ ...e, total: parseFloat(e.total.toFixed(2)), complete: e.count === items.length }))
+    .sort((a, b) => a.total - b.total)
+}
+
+function StoreComparisonTable({ result, stores, selectedNames }: { result: OptimizeResult; stores: Store[]; selectedNames: string[] }) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  const rows = buildStoreComparison(result, stores, selectedNames)
+  const splitTotal = result.stores.reduce((s, g) => s + g.subtotal, 0)
+  const cheapestComplete = rows.find(r => r.complete)
+
+  if (rows.length < 2) return null
+
+  return (
+    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, marginBottom: 12, boxShadow: t.shadowCard, overflow: 'hidden' }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Porovnanie obchodov</div>
+          <div style={{ fontSize: 12, color: t.textSec, marginTop: 2 }}>
+            Rozdelený nákup: <strong style={{ color: t.accentInk }}>{splitTotal.toFixed(2)} €</strong>
+            {cheapestComplete && cheapestComplete.total > splitTotal + 0.01 && (
+              <span> · celé v {cheapestComplete.storeName}: {cheapestComplete.total.toFixed(2)} €</span>
+            )}
+          </div>
+        </div>
+        <span style={{ color: t.textMuted, display: 'flex' }}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
+      </div>
+      {open && (
+        <div style={{ borderTop: `1px solid ${t.hairline}` }}>
+          {rows.map((r, i) => {
+            const ink = storeInk(r.storeName, t.isDark)
+            const isCheapestComplete = r.complete && cheapestComplete?.companyId === r.companyId
+            return (
+              <div key={r.companyId} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+                borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : 'none',
+                background: isCheapestComplete ? t.accentSoftBg : 'transparent',
+              }}>
+                <StoreLogo name={r.storeName} size={20} />
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: ink }}>{r.storeName}</span>
+                {!r.complete && (
+                  <span style={{ fontSize: 11, color: t.textMuted }}>{r.count}/{result.stores.flatMap(s => s.items).length} položiek</span>
+                )}
+                <span style={{ fontSize: 14, fontWeight: 700, color: isCheapestComplete ? t.accentInk : t.text, fontFamily: t.fontHead }}>{r.total.toFixed(2)} €</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -541,7 +623,7 @@ function ApprovalPanel({
 }
 
 // ─── SavedListCard ────────────────────────────────────────────────────────────
-function SavedListCard({ list, onDelete, onRename }: { list: SavedList; onDelete: () => void; onRename: (name: string) => void }) {
+function SavedListCard({ list, onDelete, onRename, onReuse }: { list: SavedList; onDelete: () => void; onRename: (name: string) => void; onReuse: () => void }) {
   const { t } = useT()
   // checked: Set of "companyId:query" keys
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -613,7 +695,13 @@ function SavedListCard({ list, onDelete, onRename }: { list: SavedList; onDelete
           </div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{new Date(list.savedAt).toLocaleString('sk-SK')}</div>
         </div>
-        <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${t.errorBorder}`, borderRadius: 10, padding: '5px 12px', cursor: 'pointer', color: t.errorText, fontSize: 12, fontWeight: 600, fontFamily: t.font }}>Zmazať</button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={onReuse} title="Použiť ako šablónu pre nový nákup"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: `1px solid ${t.border}`, borderRadius: 10, padding: '5px 12px', cursor: 'pointer', color: t.accentInk, fontSize: 12, fontWeight: 600, fontFamily: t.font }}>
+            <Repeat2 size={13} strokeWidth={2.2} /> Použiť znova
+          </button>
+          <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${t.errorBorder}`, borderRadius: 10, padding: '5px 12px', cursor: 'pointer', color: t.errorText, fontSize: 12, fontWeight: 600, fontFamily: t.font }}>Zmazať</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -681,8 +769,20 @@ function SavedListCard({ list, onDelete, onRename }: { list: SavedList; onDelete
   )
 }
 
+// Zoznam ako šablóna — vytiahni položky späť do CartItem[] pre nový nákup (dedup podľa query)
+function buildCartItemsFromList(list: SavedList): CartItem[] {
+  const seen = new Set<string>()
+  const items: CartItem[] = []
+  for (const item of list.stores.flatMap(s => s.items)) {
+    if (seen.has(item.query)) continue
+    seen.add(item.query)
+    items.push({ query: item.query, groupKey: item.groupKey, displayName: item.name || item.query, imageUrl: item.imageUrl })
+  }
+  return items
+}
+
 // ─── SavedListsScreen ─────────────────────────────────────────────────────────
-function SavedListsScreen({ onBack }: { onBack: () => void }) {
+function SavedListsScreen({ onBack, onReuse }: { onBack: () => void; onReuse: (items: CartItem[]) => void }) {
   const { t } = useT()
   const [lists, setLists] = useState<SavedList[]>([])
   const [loading, setLoading] = useState(true)
@@ -737,7 +837,7 @@ function SavedListsScreen({ onBack }: { onBack: () => void }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {lists.map(list => (
-              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} onRename={name => renameList(list.id, name)} />
+              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} onRename={name => renameList(list.id, name)} onReuse={() => onReuse(buildCartItemsFromList(list))} />
             ))}
           </div>
         )}
@@ -1244,9 +1344,30 @@ function AppInner() {
   const [pendingItems, setPendingItems] = useState<CartItem[]>([])
   // Vstupné sekcie (vyhľadávanie + obchody) sa po vytvorení zoznamu zbalia, aby ušetrili miesto
   const [inputsCollapsed, setInputsCollapsed] = useState(false)
+  const [favorites, setFavorites] = useState<FavoriteDto[]>([])
 
   // Pozadie dokumentu (overscroll) podľa témy
   useEffect(() => { document.body.style.background = t.bg }, [t.bg])
+
+  // Obľúbené položky sú viazané na účet — načítaj po prihlásení, vyprázdni po odhlásení
+  useEffect(() => {
+    if (session) api.getFavorites().then(setFavorites).catch(() => {})
+    else setFavorites([])
+  }, [session])
+
+  const isFavorite = useCallback((query: string) => favorites.some(f => f.query === query), [favorites])
+
+  const toggleFavorite = (item: CartItem) => {
+    if (isFavorite(item.query)) {
+      setFavorites(prev => prev.filter(f => f.query !== item.query))
+      api.removeFavorite(item.query).catch(() => {})
+    } else {
+      setFavorites(prev => [{ id: `local-${item.query}`, query: item.query, groupKey: item.groupKey, displayName: item.displayName, imageUrl: item.imageUrl, createdAt: new Date().toISOString() }, ...prev])
+      api.addFavorite({ query: item.query, groupKey: item.groupKey, displayName: item.displayName, imageUrl: item.imageUrl })
+        .then(saved => setFavorites(prev => prev.map(f => f.query === saved.query ? saved : f)))
+        .catch(() => setFavorites(prev => prev.filter(f => f.query !== item.query)))
+    }
+  }
 
   // Prázdny košík → vstupné sekcie vždy rozbalené
   useEffect(() => { if (cartItems.length === 0) setInputsCollapsed(false) }, [cartItems.length])
@@ -1328,7 +1449,9 @@ function AppInner() {
   if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
   if (screen === 'saved') return (
     <>
-      <SavedListsScreen onBack={() => setScreen('main')} />
+      <SavedListsScreen onBack={() => setScreen('main')} onReuse={items => {
+        setCartItems(items); setResult(null); setPendingApprovals([]); setPendingItems([]); setInputsCollapsed(false); setScreen('main')
+      }} />
       {menuOpen && session && (
         <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
           onNavigate={s => { setScreen(s); setMenuOpen(false) }}
@@ -1428,9 +1551,36 @@ function AppInner() {
                   }}>
                     <ProductImg src={item.imageUrl} size={30} radius={8} />
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.displayName}</span>
+                    {session && (
+                      <button onClick={() => toggleFavorite(item)} title={isFavorite(item.query) ? 'Odobrať z obľúbených' : 'Pridať medzi obľúbené'}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: isFavorite(item.query) ? t.promoText : t.textFaint, padding: 2, display: 'flex' }}>
+                        <Heart size={15} strokeWidth={2.2} fill={isFavorite(item.query) ? 'currentColor' : 'none'} />
+                      </button>
+                    )}
                     <button onClick={() => { setCartItems(p => p.filter(i => i.query !== item.query)); setResult(null) }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textFaint, padding: 2, display: 'flex' }}>
                       <X size={16} strokeWidth={2.4} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {session && favorites.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <SectionLabel>Obľúbené</SectionLabel>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {favorites.map(f => (
+                  <div key={f.query} onClick={() => addItem({ query: f.query, groupKey: f.groupKey ?? undefined, displayName: f.displayName, imageUrl: f.imageUrl })}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, background: t.surface2, border: `1px solid ${t.hairline}`,
+                      borderRadius: 999, padding: '5px 8px 5px 6px', cursor: 'pointer', maxWidth: 200,
+                    }}>
+                    <ProductImg src={f.imageUrl} size={22} radius={999} />
+                    <span style={{ fontSize: 13, fontWeight: 500, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.displayName}</span>
+                    <button onClick={e => { e.stopPropagation(); setFavorites(prev => prev.filter(x => x.query !== f.query)); api.removeFavorite(f.query).catch(() => {}) }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textFaint, padding: 0, display: 'flex', flexShrink: 0 }}>
+                      <X size={13} strokeWidth={2.4} />
                     </button>
                   </div>
                 ))}
@@ -1521,6 +1671,7 @@ function AppInner() {
                 </div>
               ) : null
             })()}
+            <StoreComparisonTable result={result} stores={stores} selectedNames={selectedNames} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {result.stores.map(g => <ResultCard key={g.companyId} group={g} />)}
             </div>

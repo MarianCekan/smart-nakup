@@ -31,11 +31,26 @@ router.get('/stores', (_req, res) => {
   res.json(STORES)
 })
 
+// Cena za jednotku — normalizuje na €/kg alebo €/l bez ohľadu na veľkosť balenia,
+// aby sa dali férovo porovnať rôzne balenia toho istého produktu naprieč obchodmi.
+// Bez rozpoznanej gramáže (unit 'ks' alebo packageSize 0) nemá zmysel — vraciame null.
+function computeUnitPrice(price: number, packageSize: number, unit: string): { value: number; label: 'kg' | 'l' } | null {
+  if (!packageSize || packageSize <= 0) return null
+  switch (unit.toLowerCase()) {
+    case 'kg': return { value: price / packageSize, label: 'kg' }
+    case 'g':  return { value: price / (packageSize / 1000), label: 'kg' }
+    case 'l':  return { value: price / packageSize, label: 'l' }
+    case 'ml': return { value: price / (packageSize / 1000), label: 'l' }
+    default:   return null
+  }
+}
+
 function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' | 'kompas') {
   const bestStore = (g.stores as any[])?.find(s => s.storeName === g.bestStore)
   const saving = g.worstPrice && g.worstPrice > g.bestPrice
     ? parseFloat((g.worstPrice - g.bestPrice).toFixed(2))
     : null
+  const norm = computeUnitPrice(g.bestPrice, g.packageSize, g.unit)
   return {
     groupKey: g.groupKey,
     name: g.name,
@@ -52,6 +67,8 @@ function toHit(g: ReturnType<typeof Object.assign>, source: 'priceo' | 'cenysk' 
     promoUntil: bestStore?.validUntil ?? null,
     saving,
     worstStore: g.worstStore ?? null,
+    normPrice: norm?.value ?? null,
+    normUnit: norm?.label ?? null,
   }
 }
 
@@ -193,6 +210,7 @@ router.post('/optimize', async (req, res) => {
           }
         }
         if (alt) {
+          const altNorm = computeUnitPrice(alt.s.price, alt.g.packageSize, alt.g.unit)
           needsApproval.push({
             originalQuery: item.query,
             originalGroupKey: group.groupKey,
@@ -206,6 +224,8 @@ router.post('/optimize', async (req, res) => {
               unitPrice: alt.s.unitPrice,
               storeName: alt.s.storeName,
               isPromo: true,
+              normPrice: altNorm?.value ?? null,
+              normUnit: altNorm?.label ?? null,
             },
           })
           continue
@@ -222,7 +242,8 @@ router.post('/optimize', async (req, res) => {
       const grp = kompasStoreMap.get(chosen.companyId)!
       const worstPrice = group.worstPrice
       const saving = worstPrice && worstPrice > chosen.price ? parseFloat((worstPrice - chosen.price).toFixed(2)) : null
-      grp.items.push({ query: item.query, name: (chosen as any).productName ?? group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null })
+      const itemNorm = computeUnitPrice(chosen.price, group.packageSize, group.unit)
+      grp.items.push({ query: item.query, name: (chosen as any).productName ?? group.name, groupKey: group.groupKey, packageSize: group.packageSize, unit: group.unit, price: chosen.price, unitPrice: chosen.unitPrice, isPromo: true, imageUrl: chosen.imageUrl ?? group.bestImageUrl, allStores: group.stores, promoFrom: (chosen as any).validFrom ?? null, promoUntil: (chosen as any).validUntil ?? null, saving, worstStore: group.worstStore ?? null, normPrice: itemNorm?.value ?? null, normUnit: itemNorm?.label ?? null })
       grp.subtotal = parseFloat((grp.subtotal + chosen.price).toFixed(2))
     }
 

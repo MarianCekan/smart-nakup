@@ -26,6 +26,8 @@ export type ProductHit = {
   promoUntil?: string | null
   saving?: number | null
   worstStore?: string | null
+  normPrice?: number | null
+  normUnit?: 'kg' | 'l' | null
 }
 
 export type StorePrice = {
@@ -50,6 +52,8 @@ export type NeedsApproval = {
     unitPrice: number
     storeName: string
     isPromo: boolean
+    normPrice?: number | null
+    normUnit?: 'kg' | 'l' | null
   }
 }
 
@@ -72,6 +76,8 @@ export type OptimizeResult = {
       promoUntil?: string | null
       saving?: number | null
       worstStore?: string | null
+      normPrice?: number | null
+      normUnit?: 'kg' | 'l' | null
     }[]
     subtotal: number
   }[]
@@ -80,6 +86,15 @@ export type OptimizeResult = {
   total_saving: number
   unmatched: string[]
   needsApproval: NeedsApproval[]
+}
+
+export type FavoriteDto = {
+  id: string
+  query: string
+  groupKey?: string | null
+  displayName: string
+  imageUrl?: string | null
+  createdAt: string
 }
 
 export type SavedListDto = {
@@ -103,4 +118,8 @@ export const api = {
     fetchJson<OptimizeResult>('/optimize', { method: 'POST', body: JSON.stringify({ items, company_ids }) }),
   checkIngredients: (ingredients: string[]) =>
     fetchJson<Record<string, ProductHit | null>>('/recipes/check', { method: 'POST', body: JSON.stringify({ ingredients }) }),
+  getFavorites: () => fetchJson<FavoriteDto[]>('/favorites'),
+  addFavorite: (item: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }) =>
+    fetchJson<FavoriteDto>('/favorites', { method: 'POST', body: JSON.stringify(item) }),
+  removeFavorite: (query: string) => fetchJson<{ ok: boolean }>(`/favorites/${encodeURIComponent(query)}`, { method: 'DELETE' }),
 }
