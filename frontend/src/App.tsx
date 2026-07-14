@@ -417,8 +417,9 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
 }
 
 // ─── StoreComparisonTable ─────────────────────────────────────────────────────
-// Čo by celý nákup stál, keby si všetko kúpil v jednom obchode — porovnanie oproti
-// rozdelenému nákupu. Počíta sa z už načítaných allStores na položkách, žiadny extra fetch.
+// Koľko by celý zoznam stál v JEDNOM obchode (len tie, ktoré majú úplne všetko),
+// oproti rozdelenému nákupu. Zámerne vynechávame obchody čo majú len časť zoznamu —
+// tie nie sú reálna alternatíva "choď na jedno miesto", len by mätili poradie.
 function buildStoreComparison(result: OptimizeResult, stores: Store[], selectedNames: string[]) {
   const items = result.stores.flatMap(s => s.items)
   if (!items.length) return []
@@ -435,7 +436,8 @@ function buildStoreComparison(result: OptimizeResult, stores: Store[], selectedN
     }
   }
   return [...perStore.values()]
-    .map(e => ({ ...e, total: parseFloat(e.total.toFixed(2)), complete: e.count === items.length }))
+    .filter(e => e.count === items.length)  // len obchody čo majú ÚPLNE všetko
+    .map(e => ({ storeName: e.storeName, companyId: e.companyId, total: parseFloat(e.total.toFixed(2)) }))
     .sort((a, b) => a.total - b.total)
 }
 
@@ -443,42 +445,40 @@ function StoreComparisonTable({ result, stores, selectedNames }: { result: Optim
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const rows = buildStoreComparison(result, stores, selectedNames)
-  const splitTotal = result.stores.reduce((s, g) => s + g.subtotal, 0)
-  const cheapestComplete = rows.find(r => r.complete)
+  const splitTotal = parseFloat(result.stores.reduce((s, g) => s + g.subtotal, 0).toFixed(2))
 
-  if (rows.length < 2) return null
+  // Nič na porovnanie: žiadny obchod nemá celý zoznam, alebo by to vyšlo rovnako ako rozdelený nákup
+  if (rows.length === 0 || rows[0].total <= splitTotal + 0.009) return null
+  const cheapestTotal = rows[0].total
 
   return (
     <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, marginBottom: 12, boxShadow: t.shadowCard, overflow: 'hidden' }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Porovnanie obchodov</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Oplatí sa rozdeliť nákup</div>
           <div style={{ fontSize: 12, color: t.textSec, marginTop: 2 }}>
-            Rozdelený nákup: <strong style={{ color: t.accentInk }}>{splitTotal.toFixed(2)} €</strong>
-            {cheapestComplete && cheapestComplete.total > splitTotal + 0.01 && (
-              <span> · celé v {cheapestComplete.storeName}: {cheapestComplete.total.toFixed(2)} €</span>
-            )}
+            Všetko v jednom obchode: od <strong>{cheapestTotal.toFixed(2)} €</strong> · rozdelene ušetríš <strong style={{ color: t.accentInk }}>{(cheapestTotal - splitTotal).toFixed(2)} €</strong>
           </div>
         </div>
         <span style={{ color: t.textMuted, display: 'flex' }}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
       </div>
       {open && (
         <div style={{ borderTop: `1px solid ${t.hairline}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: t.accentSoftBg, borderBottom: `1px solid ${t.hairline}` }}>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: t.accentSoftText }}>Rozdelene (odporúčame)</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: t.accentInk, fontFamily: t.fontHead }}>{splitTotal.toFixed(2)} €</span>
+          </div>
+          <div style={{ padding: '6px 16px 2px', fontSize: 11, color: t.textMuted }}>Celý zoznam len v jednom obchode:</div>
           {rows.map((r, i) => {
             const ink = storeInk(r.storeName, t.isDark)
-            const isCheapestComplete = r.complete && cheapestComplete?.companyId === r.companyId
             return (
               <div key={r.companyId} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
                 borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : 'none',
-                background: isCheapestComplete ? t.accentSoftBg : 'transparent',
               }}>
                 <StoreLogo name={r.storeName} size={20} />
                 <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: ink }}>{r.storeName}</span>
-                {!r.complete && (
-                  <span style={{ fontSize: 11, color: t.textMuted }}>{r.count}/{result.stores.flatMap(s => s.items).length} položiek</span>
-                )}
-                <span style={{ fontSize: 14, fontWeight: 700, color: isCheapestComplete ? t.accentInk : t.text, fontFamily: t.fontHead }}>{r.total.toFixed(2)} €</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: t.fontHead }}>{r.total.toFixed(2)} €</span>
               </div>
             )
           })}
