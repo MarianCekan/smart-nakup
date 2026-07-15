@@ -82,12 +82,35 @@ function StoreLogo({ name, size = 22, muted = false }: { name: string; size?: nu
   )
 }
 
-function ProductImg({ src, size = 36, radius = 11 }: { src: string | null | undefined; size?: number; radius?: number }) {
+function ProductImg({ src, size = 36, radius = 11, zoomable = false }: { src: string | null | undefined; size?: number; radius?: number; zoomable?: boolean }) {
   const { t } = useT()
   const [failed, setFailed] = useState(false)
+  const [zoomed, setZoomed] = useState(false)
   const base = { width: size, height: size, objectFit: 'contain' as const, borderRadius: radius, flexShrink: 0, background: t.surface2 }
   if (src && !failed) {
-    return <img src={src} alt="" style={{ ...base, border: `1px solid ${t.hairline}` }} onError={() => setFailed(true)} />
+    return (
+      <>
+        <img src={src} alt="" style={{ ...base, border: `1px solid ${t.hairline}`, cursor: zoomable ? 'zoom-in' : undefined }}
+          onError={() => setFailed(true)}
+          onClick={zoomable ? e => { e.stopPropagation(); setZoomed(true) } : undefined}
+        />
+        {zoomed && (
+          <div onClick={e => { e.stopPropagation(); setZoomed(false) }} style={{
+            position: 'fixed', inset: 0, zIndex: 2000, background: t.scrim,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}>
+            <img src={src} alt="" style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 16, background: t.surface }} />
+            <button onClick={e => { e.stopPropagation(); setZoomed(false) }} title="Zavrieť" style={{
+              position: 'fixed', top: 20, right: 20, width: 40, height: 40, borderRadius: '50%',
+              background: t.surface, border: `1px solid ${t.border}`, color: t.text, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <X size={18} strokeWidth={2.4} />
+            </button>
+          </div>
+        )}
+      </>
+    )
   }
   return <img src="/stores/food-placeholder.svg" alt="" style={{ ...base, opacity: 0.4, padding: 4 }} />
 }
@@ -324,7 +347,7 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
               <li key={hit.groupKey}
                 onClick={() => commit({ query: hit.name, groupKey: hit.groupKey, displayName: hit.name, imageUrl: hit.imageUrl })}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, cursor: 'pointer', background: i === activeIdx ? t.rowActive : 'transparent', transition: 'background 0.12s' }}>
-                <ProductImg src={hit.imageUrl} size={42} />
+                <ProductImg src={hit.imageUrl} size={42} zoomable />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: t.font }}>{hit.name}</div>
                   <div style={{ fontSize: 12, color: t.textSec, fontFamily: t.font }}>
