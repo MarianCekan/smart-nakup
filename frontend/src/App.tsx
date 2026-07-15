@@ -92,6 +92,23 @@ function ProductImg({ src, size = 36, radius = 11 }: { src: string | null | unde
   return <img src="/stores/food-placeholder.svg" alt="" style={{ ...base, opacity: 0.4, padding: 4 }} />
 }
 
+// Horizontálne swipe gesto — swipeLeft (prst ide sprava doľava) / swipeRight (zľava doprava).
+// Ignoruje viac-zvislé pohyby (scroll) a krátke poťahy pod prahom.
+function useSwipe(onSwipeLeft?: () => void, onSwipeRight?: () => void) {
+  const start = useRef<{ x: number; y: number } | null>(null)
+  return {
+    onTouchStart: (e: React.TouchEvent) => { start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } },
+    onTouchEnd: (e: React.TouchEvent) => {
+      if (!start.current) return
+      const dx = e.changedTouches[0].clientX - start.current.x
+      const dy = e.changedTouches[0].clientY - start.current.y
+      start.current = null
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+      if (dx < 0) onSwipeLeft?.(); else onSwipeRight?.()
+    },
+  }
+}
+
 // Sekčný nadpis: 11/700 UPPERCASE
 function SectionLabel({ children }: { children: React.ReactNode }) {
   const { t } = useT()
@@ -760,8 +777,9 @@ function SavedListsScreen({ onBack, onReuse }: { onBack: () => void; onReuse: (i
     api.renameList(id, name).catch(() => {})
   }
 
+  const swipe = useSwipe(undefined, onBack)
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+    <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
         <ScreenHeader title="Uložené zoznamy" onBack={onBack} />
 
@@ -1061,8 +1079,9 @@ function RecipesScreen({ onBack, onAddToCart }: {
 
   useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current) }, [])
 
+  const swipe = useSwipe(undefined, onBack)
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+    <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
         <ScreenHeader title="Recepty z akcií" onBack={onBack} />
 
@@ -1430,9 +1449,10 @@ function AppInner() {
   )
 
   const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
+  const mainSwipe = useSwipe(() => { if (session) setMenuOpen(true) }, undefined)
 
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+    <div {...mainSwipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
 
         {/* Bočné menu — len pre prihlásených */}
@@ -1634,13 +1654,13 @@ function AppInner() {
                   background: t.savingBg, border: `1px solid ${t.savingBorder}`,
                   borderLeft: t.savingStripe ? `3px solid ${t.savingStripe}` : `1px solid ${t.savingBorder}`,
                   borderRadius: 16, padding: '15px 18px', marginBottom: 12,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
                 }}>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, color: t.savingText, fontSize: 15, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>Celková úspora</div>
                     <div style={{ fontSize: 12, color: t.savingSub, marginTop: 2 }}>oproti najdrahšiemu obchodu pre každú položku</div>
                   </div>
-                  <div style={{ fontSize: 30, fontWeight: 800, color: t.savingText, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>{totalSaving.toFixed(2)} €</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: t.savingText, fontFamily: t.fontHead, letterSpacing: '-0.02em', whiteSpace: 'nowrap', flexShrink: 0 }}>{totalSaving.toFixed(2)} €</div>
                 </div>
               ) : null
             })()}
