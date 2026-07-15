@@ -334,11 +334,20 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                 </div>
                 <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}
                   onMouseEnter={e => {
+                    if (hit.storeCount <= 1) return
                     const r = e.currentTarget.getBoundingClientRect()
                     setHoveredKey(hit.groupKey)
                     setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
                   }}
-                  onMouseLeave={() => setHoveredKey(null)}>
+                  onMouseLeave={() => setHoveredKey(null)}
+                  onClick={e => {
+                    // Na dotykových zariadeniach hover nefunguje — klik na "Kaufland +N" prepne zoznam obchodov
+                    if (hit.storeCount <= 1) return
+                    e.stopPropagation()
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
+                    setHoveredKey(prev => prev === hit.groupKey ? null : hit.groupKey)
+                  }}>
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: `${storeBrand(hit.bestStore).main}${t.isDark ? '22' : '18'}`, color: ink, fontWeight: 700, whiteSpace: 'nowrap', cursor: hit.storeCount > 1 ? 'default' : undefined, fontFamily: t.font }}>
                     {hit.bestStore}{hit.storeCount > 1 ? ` +${hit.storeCount - 1}` : ''}
                   </span>
