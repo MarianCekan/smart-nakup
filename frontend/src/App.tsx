@@ -1339,8 +1339,16 @@ function AppInner() {
     setScreen('saved')
   }
 
+  // Render free tier uspáva backend po neaktivite — prvý štart trvá cca 30-60s.
+  // Ak sa /stores neozve rýchlo, ukáž vysvetlenie namiesto tichého čakania.
+  const [wakingUp, setWakingUp] = useState(false)
   useEffect(() => {
-    api.stores().then(data => { setStores(data); setSelectedNames(data.map(s => s.name)) }).catch(() => {})
+    const wakeTimer = setTimeout(() => setWakingUp(true), 2500)
+    api.stores()
+      .then(data => { setStores(data); setSelectedNames(data.map(s => s.name)) })
+      .catch(() => {})
+      .finally(() => { clearTimeout(wakeTimer); setWakingUp(false) })
+    return () => clearTimeout(wakeTimer)
   }, [])
 
   const addItem = useCallback((item: CartItem) => {
@@ -1455,6 +1463,16 @@ function AppInner() {
           )}
         </div>
 
+        {wakingUp && (
+          <div style={{
+            background: t.upcomingBg, border: `1px solid ${t.upcomingBorder}`, borderRadius: 12,
+            padding: '9px 14px', marginBottom: 12, fontSize: 12.5, color: t.upcomingText, display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <RefreshCw size={13} strokeWidth={2.2} style={{ flexShrink: 0, animation: 'pulse 1.2s infinite' }} />
+            Aplikácia sa prebúdza — prvé spustenie trvá cca minútu, potom to pôjde svižne.
+          </div>
+        )}
+
         {/* Po vytvorení zoznamu sa vstupné sekcie zbalia do kompaktného pruhu */}
         {inputsCollapsed ? (
           <div onClick={() => setInputsCollapsed(false)} style={{
@@ -1488,7 +1506,13 @@ function AppInner() {
           <TypeaheadInput onAdd={addItem} />
           {cartItems.length > 0 && (
             <div style={{ marginTop: 14 }}>
-              <SectionLabel>V košíku · {cartItems.length} {cartItems.length === 1 ? 'položka' : cartItems.length < 5 ? 'položky' : 'položiek'}</SectionLabel>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <SectionLabel>V košíku · {cartItems.length} {cartItems.length === 1 ? 'položka' : cartItems.length < 5 ? 'položky' : 'položiek'}</SectionLabel>
+                <button onClick={() => { setCartItems([]); setResult(null) }} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted,
+                  fontSize: 11.5, fontWeight: 600, fontFamily: t.font, padding: 0, marginTop: -8,
+                }}>Vymazať zoznam</button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {cartItems.map(item => (
                   <div key={item.query} style={{
