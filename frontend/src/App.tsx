@@ -196,7 +196,9 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [hoverPos, setHoverPos] = useState<{ right: number; top: number }>({ right: 0, top: 0 })
   const [phraseIdx, setPhraseIdx] = useState(0)
-  const debouncedQ = useDebounce(value, 280)
+  // Sekunda pauzy pred vyhľadaním — nechceme posielať dopyt po každom písmene,
+  // aby nás zdroj (kompas) nezačal blokovať za priveľa requestov.
+  const debouncedQ = useDebounce(value, 1000)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   // Zabráni duchovému mouseenter+click po dotyku, aby hneď znova nezavreli badge tooltip
