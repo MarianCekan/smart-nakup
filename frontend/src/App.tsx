@@ -436,7 +436,7 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
             display: 'flex', alignItems: 'center', gap: 11, padding: '11px 2px',
             borderBottom: i < group.items.length - 1 ? `1px solid ${t.hairline}` : 'none',
           }}>
-            <ProductImg src={item.imageUrl} size={36} />
+            <ProductImg src={item.imageUrl} size={36} zoomable />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14, color: t.text, fontFamily: t.font }}>{item.query}</div>
               {(item.name !== item.query || item.packageSize > 0) && (
@@ -584,7 +584,7 @@ function ApprovalPanel({
                           border: `2px solid ${active ? t.accent : t.textFaint}`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>{active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.accent }} />}</div>
-                        <ProductImg src={s.imageUrl} size={38} />
+                        <ProductImg src={s.imageUrl} size={38} zoomable />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: 13, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
                           <div style={{ fontSize: 11.5, color: t.textSec, marginTop: 1, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -1299,8 +1299,9 @@ function RecipeDetailScreen({ recipe, onBack }: { recipe: Recipe; onBack: () => 
     { key: 'carbs', label: 'Sacharidy', unit: 'g' },
     { key: 'fat', label: 'Tuky', unit: 'g' },
   ]
+  const swipe = useSwipe(undefined, onBack)
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+    <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
         <ScreenHeader title={recipe.name} onBack={onBack} />
 
@@ -1352,12 +1353,21 @@ function RecipeDetailScreen({ recipe, onBack }: { recipe: Recipe; onBack: () => 
 function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+function addDaysIso(date: string, n: number): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return isoDate(d)
+}
 
-function MealPlanScreen({ onBack }: { onBack: () => void }) {
+function MealPlanScreen({ onBack, onAddToCart }: {
+  onBack: () => void
+  onAddToCart: (items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[]) => void
+}) {
   const { t } = useT()
   const [hits, setHits] = useState<Record<string, ProductHit | null> | null>(null)
   const [plan, setPlan] = useState<Record<string, string>>({})
   const [pickerDate, setPickerDate] = useState<string | null>(null)
+  const [spanDays, setSpanDays] = useState(1)
   const [detailId, setDetailId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1375,14 +1385,46 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
   const recommended = hits ? RECIPES.filter(r => r.ingredients.every(i => hits[i])) : []
 
   const assign = (date: string, recipeId: string) => {
-    setPlan(prev => ({ ...prev, [date]: recipeId }))
+    const dates = [...Array(spanDays)].map((_, i) => addDaysIso(date, i))
+    setPlan(prev => { const next = { ...prev }; dates.forEach(d => { next[d] = recipeId }); return next })
     setPickerDate(null)
-    api.planMeal(date, recipeId).catch(() => {})
+    setSpanDays(1)
+    dates.forEach(d => api.planMeal(d, recipeId).catch(() => {}))
   }
   const unassign = (date: string) => {
     setPlan(prev => { const next = { ...prev }; delete next[date]; return next })
     api.unplanMeal(date).catch(() => {})
   }
+
+  // Ak akcia na niektorú surovinu skončí skôr než naplánovaný deň, upozorníme —
+  // ľahko sa stane že recept naplánujem na štvrtok, ale zľava bola len do stredy.
+  const promoWarning = (recipe: Recipe, date: string): string | null => {
+    if (!hits) return null
+    for (const ing of recipe.ingredients) {
+      const until = hits[ing]?.promoUntil
+      if (until && until < date) return ing
+    }
+    return null
+  }
+
+  const plannedRecipes = [...new Set(Object.values(plan))].map(id => RECIPES.find(r => r.id === id)).filter((r): r is Recipe => !!r)
+
+  const createListFromPlan = () => {
+    const seen = new Set<string>()
+    const items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[] = []
+    for (const recipe of plannedRecipes) {
+      for (const ing of recipe.ingredients) {
+        if (seen.has(ing)) continue
+        seen.add(ing)
+        const hit = hits?.[ing]
+        items.push({ query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl })
+      }
+    }
+    onAddToCart(items)
+    onBack()
+  }
+
+  const swipe = useSwipe(undefined, onBack)
 
   if (detailId) {
     const recipe = RECIPES.find(r => r.id === detailId)
@@ -1390,7 +1432,7 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+    <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
         <ScreenHeader title="Plánovač jedálnička" onBack={onBack} />
 
@@ -1417,12 +1459,23 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
+        {plannedRecipes.length > 0 && (
+          <button onClick={createListFromPlan} style={{
+            width: '100%', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            background: t.accent, color: t.accentOn, border: 'none', borderRadius: 12,
+            padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead, cursor: 'pointer',
+          }}>
+            <ClipboardList size={16} strokeWidth={2.4} /> Vytvoriť zoznam z naplánovaných jedál
+          </button>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {days.map(d => {
             const date = isoDate(d)
             const recipeId = plan[date]
             const recipe = recipeId ? RECIPES.find(r => r.id === recipeId) : null
             const isToday = date === isoDate(new Date())
+            const warnIng = recipe ? promoWarning(recipe, date) : null
             return (
               <div key={date} style={{
                 display: 'flex', alignItems: 'center', gap: 12, background: t.surface,
@@ -1437,6 +1490,11 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
                     <div onClick={() => setDetailId(recipe.id)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recipe.name}</div>
                       <div style={{ fontSize: 11.5, color: t.textMuted }}>{recipe.time}</div>
+                      {warnIng && (
+                        <div style={{ fontSize: 11, color: t.upcomingText, marginTop: 2 }}>
+                          ⚠ akcia na {warnIng} skončí skôr než tento deň
+                        </div>
+                      )}
                     </div>
                     <button onClick={() => unassign(date)} title="Zrušiť" style={{
                       flexShrink: 0, display: 'flex', background: 'none', border: 'none', color: t.textMuted, opacity: 0.7, cursor: 'pointer', padding: 4,
@@ -1445,7 +1503,7 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setPickerDate(date)} style={{
+                  <button onClick={() => { setPickerDate(date); setSpanDays(1) }} style={{
                     flex: 1, textAlign: 'left', background: 'none', border: `1px dashed ${t.border}`, borderRadius: 10,
                     padding: '8px 10px', fontSize: 13, color: t.textMuted, cursor: 'pointer', fontFamily: t.font,
                   }}>
@@ -1466,7 +1524,19 @@ function MealPlanScreen({ onBack }: { onBack: () => void }) {
               background: t.surface, borderRadius: '20px 20px 0 0', padding: 18, maxWidth: 660, width: '100%',
               maxHeight: '75vh', overflowY: 'auto', boxShadow: t.shadowDrawer,
             }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 12 }}>Vyber recept</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 10 }}>Vyber recept</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: 12.5, color: t.textMuted }}>Pokryje dní:</span>
+                {[1, 2, 3, 4].map(n => (
+                  <button key={n} onClick={() => setSpanDays(n)} style={{
+                    width: 30, height: 30, borderRadius: 9, cursor: 'pointer', fontFamily: t.font,
+                    border: `1px solid ${spanDays === n ? t.accent : t.border}`,
+                    background: spanDays === n ? t.accentSoftBg : 'none',
+                    color: spanDays === n ? t.accentSoftText : t.textSec,
+                    fontSize: 13, fontWeight: 700,
+                  }}>{n}</button>
+                ))}
+              </div>
               {[...RECIPES].sort((a, b) => {
                 const aOn = hits && a.ingredients.every(i => hits[i]) ? 1 : 0
                 const bOn = hits && b.ingredients.every(i => hits[i]) ? 1 : 0
@@ -1929,7 +1999,12 @@ function AppInner() {
   )
   if (screen === 'mealplan') return (
     <>
-      <MealPlanScreen onBack={() => setScreen('main')} />
+      <MealPlanScreen
+        onBack={() => setScreen('main')}
+        onAddToCart={items => {
+          items.forEach(item => setCartItems(prev => prev.some(i => i.query === item.query) ? prev : [...prev, item]))
+        }}
+      />
       {menuOpen && session && (
         <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
           onNavigate={s => { setScreen(s); setMenuOpen(false) }}
@@ -2028,7 +2103,7 @@ function AppInner() {
                     display: 'flex', alignItems: 'center', gap: 10, background: t.surface2,
                     border: `1px solid ${t.hairline}`, padding: '8px 12px', borderRadius: 12,
                   }}>
-                    <ProductImg src={item.imageUrl} size={30} radius={8} />
+                    <ProductImg src={item.imageUrl} size={30} radius={8} zoomable />
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.displayName}</span>
                     {session && (
                       <button onClick={() => toggleFavorite(item)} title={isFavorite(item.query) ? 'Odobrať z obľúbených' : 'Pridať medzi obľúbené'}
@@ -2055,7 +2130,7 @@ function AppInner() {
                       display: 'flex', alignItems: 'center', gap: 7, background: t.surface2, border: `1px solid ${t.hairline}`,
                       borderRadius: 999, padding: '5px 8px 5px 6px', cursor: 'pointer', maxWidth: 200,
                     }}>
-                    <ProductImg src={f.imageUrl} size={22} radius={999} />
+                    <ProductImg src={f.imageUrl} size={22} radius={999} zoomable />
                     <span style={{ fontSize: 13, fontWeight: 500, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.displayName}</span>
                     <button onClick={e => { e.stopPropagation(); setFavorites(prev => prev.filter(x => x.query !== f.query)); api.removeFavorite(f.query).catch(() => {}) }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textFaint, padding: 0, display: 'flex', flexShrink: 0 }}>
