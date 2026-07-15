@@ -1368,6 +1368,7 @@ function MealPlanScreen({ onBack, onAddToCart }: {
   const [plan, setPlan] = useState<Record<string, string>>({})
   const [pickerDate, setPickerDate] = useState<string | null>(null)
   const [spanDays, setSpanDays] = useState(1)
+  const [autoSpan, setAutoSpan] = useState(2)
   const [detailId, setDetailId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1396,15 +1397,56 @@ function MealPlanScreen({ onBack, onAddToCart }: {
     api.unplanMeal(date).catch(() => {})
   }
 
-  // Ak akcia na niektorú surovinu skončí skôr než naplánovaný deň, upozorníme —
+  // Ak akcia na niektorú surovinu skončí skôr než deň NÁKUPU, upozorníme —
   // ľahko sa stane že recept naplánujem na štvrtok, ale zľava bola len do stredy.
-  const promoWarning = (recipe: Recipe, date: string): string | null => {
+  // Keď ten istý recept pokrýva viac dní po sebe, suroviny sa kupujú len raz (v prvý
+  // deň streaku) — nasledujúce dni dojedania sa preto neupozorňujú, kúpa je už za nami.
+  const promoWarning = (recipe: Recipe, buyDate: string): string | null => {
     if (!hits) return null
     for (const ing of recipe.ingredients) {
       const until = hits[ing]?.promoUntil
-      if (until && until < date) return ing
+      if (until && until < buyDate) return ing
     }
     return null
+  }
+  const streakStart = (date: string, recipeId: string): string => {
+    let d = date
+    while (plan[addDaysIso(d, -1)] === recipeId) d = addDaysIso(d, -1)
+    return d
+  }
+
+  const promoEndDate = (recipe: Recipe): string => {
+    let min = '9999-12-31'
+    for (const ing of recipe.ingredients) {
+      const until = hits?.[ing]?.promoUntil
+      if (until && until < min) min = until
+    }
+    return min
+  }
+
+  // Automatický návrh: doplní prázdne dni receptami z akcie, prednostne tými
+  // ktorých zľava končí najskôr — a rešpektuje, koľko dní po sebe je človek
+  // ochotný jesť to isté (nezapisuje do dní, ktoré už majú svoj plán).
+  const autoPlan = () => {
+    if (recommended.length === 0) return
+    const sorted = [...recommended].sort((a, b) => promoEndDate(a) < promoEndDate(b) ? -1 : 1)
+    const merged = { ...plan }
+    const toSave: { date: string; recipeId: string }[] = []
+    let qi = 0
+    for (let i = 0; i < days.length; i++) {
+      const date = isoDate(days[i])
+      if (merged[date]) continue
+      const recipe = sorted[qi % sorted.length]
+      qi++
+      for (let k = 0; k < autoSpan && i + k < days.length; k++) {
+        const d2 = isoDate(days[i + k])
+        if (merged[d2]) break
+        merged[d2] = recipe.id
+        toSave.push({ date: d2, recipeId: recipe.id })
+      }
+    }
+    setPlan(merged)
+    toSave.forEach(a => api.planMeal(a.date, a.recipeId).catch(() => {}))
   }
 
   const plannedRecipes = [...new Set(Object.values(plan))].map(id => RECIPES.find(r => r.id === id)).filter((r): r is Recipe => !!r)
@@ -1459,6 +1501,29 @@ function MealPlanScreen({ onBack, onAddToCart }: {
           )}
         </div>
 
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 14, padding: 14, marginBottom: 16, boxShadow: t.shadowCard }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 12.5, color: t.textMuted, flex: 1 }}>Koľko dní po sebe si ochotný jesť to isté jedlo?</span>
+            {[1, 2, 3, 4].map(n => (
+              <button key={n} onClick={() => setAutoSpan(n)} style={{
+                width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontFamily: t.font, flexShrink: 0,
+                border: `1px solid ${autoSpan === n ? t.accent : t.border}`,
+                background: autoSpan === n ? t.accentSoftBg : 'none',
+                color: autoSpan === n ? t.accentSoftText : t.textSec,
+                fontSize: 12.5, fontWeight: 700,
+              }}>{n}</button>
+            ))}
+          </div>
+          <button onClick={autoPlan} disabled={recommended.length === 0} style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            background: recommended.length === 0 ? t.surface2 : t.accent, color: recommended.length === 0 ? t.textFaint : t.accentOn,
+            border: 'none', borderRadius: 10, padding: '10px', fontSize: 13.5, fontWeight: 800, fontFamily: t.fontHead,
+            cursor: recommended.length === 0 ? 'default' : 'pointer',
+          }}>
+            <Sparkles size={15} strokeWidth={2.4} /> Navrhnúť podľa akcií
+          </button>
+        </div>
+
         {plannedRecipes.length > 0 && (
           <button onClick={createListFromPlan} style={{
             width: '100%', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -1475,7 +1540,7 @@ function MealPlanScreen({ onBack, onAddToCart }: {
             const recipeId = plan[date]
             const recipe = recipeId ? RECIPES.find(r => r.id === recipeId) : null
             const isToday = date === isoDate(new Date())
-            const warnIng = recipe ? promoWarning(recipe, date) : null
+            const warnIng = recipe ? promoWarning(recipe, streakStart(date, recipeId)) : null
             return (
               <div key={date} style={{
                 display: 'flex', alignItems: 'center', gap: 12, background: t.surface,
