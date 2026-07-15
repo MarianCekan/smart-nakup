@@ -1101,76 +1101,251 @@ function VerifyEmailScreen({ email, onBack }: { email: string; onBack: () => voi
 }
 
 // ─── Recepty ──────────────────────────────────────────────────────────────────
-type Recipe = { id: string; name: string; time: string; ingredients: string[] }
+type Nutrition = { kcal: number; protein: number; carbs: number; fat: number }
+type Recipe = {
+  id: string; name: string; time: string; ingredients: string[]
+  servings: number
+  amounts: Record<string, string>
+  instructions: string[]
+  nutrition: Nutrition
+}
 
 const RECIPES: Recipe[] = [
   {
     id: 'bolognese',
     name: 'Spaghetti bolognese',
     time: '40 min',
+    servings: 4,
     ingredients: ['mleté mäso', 'cestoviny', 'paradajková omáčka', 'cibuľa', 'mrkva', 'cesnak'],
+    amounts: { 'mleté mäso': '500 g', 'cestoviny': '400 g', 'paradajková omáčka': '400 g', 'cibuľa': '1 ks', 'mrkva': '1 ks', 'cesnak': '2 strúčiky' },
+    instructions: [
+      'Cibuľu a cesnak nakrájajte nadrobno, mrkvu nastrúhajte.',
+      'Na oleji orestujte cibuľu do zosklovatenia, pridajte cesnak a mrkvu.',
+      'Pridajte mleté mäso a opečte dozlata.',
+      'Zalejte paradajkovou omáčkou, okoreňte a duste 20-25 min na miernom ohni.',
+      'Cestoviny uvarte podľa návodu v osolenej vode.',
+      'Podávajte omáčku na cestovinách, prípadne s parmezánom.',
+    ],
+    nutrition: { kcal: 620, protein: 32, carbs: 68, fat: 22 },
   },
   {
     id: 'sosovica',
     name: 'Šošovicový prívarok s vajcom',
     time: '35 min',
+    servings: 4,
     ingredients: ['červená šošovica', 'klobása', 'cibuľa', 'mrkva', 'zemiaky', 'vajcia', 'kyslá smotana'],
+    amounts: { 'červená šošovica': '300 g', 'klobása': '200 g', 'cibuľa': '1 ks', 'mrkva': '1 ks', 'zemiaky': '300 g', 'vajcia': '4 ks', 'kyslá smotana': '100 g' },
+    instructions: [
+      'Šošovicu prepláchnite, zemiaky a mrkvu ošúpte a nakrájajte na kocky.',
+      'Podusenú cibuľu na oleji doplňte zeleninou a šošovicou, zalejte vodou.',
+      'Varte 20-25 min do mäkka, priebežne miešajte.',
+      'Klobásu nakrájajte na kolieska, opečte a pridajte do prívarku.',
+      'Zjemnite kyslou smotanou, dochuťte soľou a korením.',
+      'Podávajte s natvrdo uvareným vajcom.',
+    ],
+    nutrition: { kcal: 480, protein: 24, carbs: 52, fat: 18 },
   },
   {
     id: 'segedin',
     name: 'Segedínsky guláš',
     time: '60 min',
+    servings: 4,
     ingredients: ['bravčové mäso', 'kyslá kapusta', 'cibuľa', 'kyslá smotana', 'paprika mletá', 'ryža'],
+    amounts: { 'bravčové mäso': '600 g', 'kyslá kapusta': '400 g', 'cibuľa': '1 ks', 'kyslá smotana': '200 g', 'paprika mletá': '1 PL', 'ryža': '300 g' },
+    instructions: [
+      'Mäso nakrájajte na kocky, cibuľu nadrobno.',
+      'Opražte cibuľu dozlata, pridajte mäso a opečte zo všetkých strán.',
+      'Vmiešajte mletú papriku, zalejte vodou a duste 40 min do mäkka.',
+      'Pridajte kyslú kapustu a duste ďalších 15 min.',
+      'Zjemnite kyslou smotanou, prípadne zahustite.',
+      'Podávajte s varenou ryžou.',
+    ],
+    nutrition: { kcal: 560, protein: 34, carbs: 42, fat: 26 },
   },
   {
     id: 'polievka',
     name: 'Kuracia polievka s rezancami',
     time: '50 min',
+    servings: 4,
     ingredients: ['kuracie prsia', 'mrkva', 'zeler', 'cibuľa', 'rezance', 'petržlen'],
+    amounts: { 'kuracie prsia': '400 g', 'mrkva': '2 ks', 'zeler': '1 ks', 'cibuľa': '1 ks', 'rezance': '150 g', 'petržlen': '1 zväzok' },
+    instructions: [
+      'Zeleninu ošúpte a nakrájajte, kuracie mäso opláchnite.',
+      'Mäso a zeleninu varte v osolenej vode cca 30 min do mäkka.',
+      'Mäso vyberte, rozdrobte na vlákna a vráťte späť do vývaru.',
+      'Pridajte rezance a varte podľa návodu do mäkka.',
+      'Dochuťte, posypte čerstvým petržlenom.',
+    ],
+    nutrition: { kcal: 320, protein: 28, carbs: 34, fat: 8 },
   },
   {
     id: 'rizoto',
     name: 'Rizoto so šampiňónmi',
     time: '30 min',
+    servings: 4,
     ingredients: ['ryža', 'šampiňóny', 'maslo', 'cibuľa', 'cesnak', 'smotana na varenie'],
+    amounts: { 'ryža': '300 g', 'šampiňóny': '300 g', 'maslo': '40 g', 'cibuľa': '1 ks', 'cesnak': '2 strúčiky', 'smotana na varenie': '200 ml' },
+    instructions: [
+      'Cibuľu a cesnak nakrájajte nadrobno, huby na plátky.',
+      'Na masle orestujte cibuľu, pridajte ryžu a krátko opražte.',
+      'Postupne zalievajte vývarom/vodou a miešajte do mäkka (cca 18 min).',
+      'Huby opečte osobitne dozlata a vmiešajte do rizota.',
+      'Na záver vmiešajte smotanu a cesnak, dochuťte.',
+    ],
+    nutrition: { kcal: 480, protein: 12, carbs: 62, fat: 18 },
   },
   {
     id: 'vajcia-zemiaky',
     name: 'Zemiaky s praženicou',
     time: '25 min',
+    servings: 4,
     ingredients: ['zemiaky', 'vajcia', 'cibuľa', 'slanina', 'maslo'],
+    amounts: { 'zemiaky': '600 g', 'vajcia': '6 ks', 'cibuľa': '1 ks', 'slanina': '150 g', 'maslo': '20 g' },
+    instructions: [
+      'Zemiaky uvarte v šupke alebo opečte nakrájané na kocky.',
+      'Slaninu opečte dochrumkava, pridajte cibuľu.',
+      'Pridajte uvarené/opečené zemiaky, krátko opečte spolu.',
+      'Rozšľahané vajcia vlejte na panvicu a za stáleho miešania usmažte praženicu.',
+    ],
+    nutrition: { kcal: 450, protein: 18, carbs: 38, fat: 26 },
   },
   {
     id: 'tunak-cestoviny',
     name: 'Cestoviny s tuniakom',
     time: '20 min',
+    servings: 4,
     ingredients: ['cestoviny', 'tuniak', 'paradajková omáčka', 'cibuľa', 'cesnak', 'syr'],
+    amounts: { 'cestoviny': '400 g', 'tuniak': '2 konzervy', 'paradajková omáčka': '300 g', 'cibuľa': '1 ks', 'cesnak': '2 strúčiky', 'syr': '80 g' },
+    instructions: [
+      'Cestoviny uvarte podľa návodu.',
+      'Cibuľu a cesnak orestujte na oleji.',
+      'Pridajte scedeného tuniaka a paradajkovú omáčku, krátko preduste.',
+      'Zmiešajte s uvarenými cestovinami.',
+      'Posypte strúhaným syrom.',
+    ],
+    nutrition: { kcal: 520, protein: 30, carbs: 64, fat: 14 },
   },
   {
     id: 'kuracie-ryza',
     name: 'Kuracie so zeleninou a ryžou',
     time: '30 min',
+    servings: 4,
     ingredients: ['kuracie prsia', 'ryža', 'mrkva', 'hrášok', 'cibuľa', 'sójová omáčka'],
+    amounts: { 'kuracie prsia': '500 g', 'ryža': '300 g', 'mrkva': '2 ks', 'hrášok': '200 g', 'cibuľa': '1 ks', 'sójová omáčka': '3 PL' },
+    instructions: [
+      'Kuracie prsia nakrájajte na prúžky, mrkvu na tenké plátky.',
+      'Na panvici/woku opečte kuracie mäso dozlata, vyberte.',
+      'Orestujte cibuľu a mrkvu, pridajte hrášok.',
+      'Vráťte mäso späť, podlejte sójovou omáčkou a krátko preduste.',
+      'Podávajte s uvarenou ryžou.',
+    ],
+    nutrition: { kcal: 480, protein: 36, carbs: 52, fat: 10 },
   },
   {
     id: 'gulas',
     name: 'Bravčový guláš',
     time: '70 min',
+    servings: 4,
     ingredients: ['bravčové mäso', 'cibuľa', 'zemiaky', 'paprika mletá', 'paprika', 'cesnak'],
+    amounts: { 'bravčové mäso': '600 g', 'cibuľa': '2 ks', 'zemiaky': '400 g', 'paprika mletá': '1 PL', 'paprika': '2 ks', 'cesnak': '2 strúčiky' },
+    instructions: [
+      'Mäso a cibuľu nakrájajte na kocky.',
+      'Cibuľu opražte dozlata, pridajte mäso a opečte.',
+      'Vmiešajte mletú papriku, zalejte vodou a duste 40 min.',
+      'Pridajte zemiaky a papriku, duste ďalších 20 min do mäkka.',
+      'Dochuťte cesnakom a korením.',
+    ],
+    nutrition: { kcal: 540, protein: 34, carbs: 40, fat: 24 },
   },
   {
     id: 'palacinky',
     name: 'Palacinky',
     time: '25 min',
+    servings: 4,
     ingredients: ['múka', 'mlieko', 'vajcia', 'cukor', 'džem'],
+    amounts: { 'múka': '250 g', 'mlieko': '500 ml', 'vajcia': '2 ks', 'cukor': '2 PL', 'džem': '200 g' },
+    instructions: [
+      'Zmiešajte múku, mlieko, vajcia a cukor na hladké cesto.',
+      'Nechajte cesto 10 min odstáť.',
+      'Na rozohriatej panvici vypečte tenké palacinky z oboch strán.',
+      'Plňte džemom a zarolujte.',
+    ],
+    nutrition: { kcal: 320, protein: 9, carbs: 52, fat: 8 },
   },
   {
     id: 'francuzske-zemiaky',
     name: 'Francúzske zemiaky',
     time: '55 min',
+    servings: 4,
     ingredients: ['zemiaky', 'vajcia', 'klobása', 'cibuľa', 'kyslá smotana', 'syr'],
+    amounts: { 'zemiaky': '800 g', 'vajcia': '4 ks', 'klobása': '200 g', 'cibuľa': '1 ks', 'kyslá smotana': '200 g', 'syr': '150 g' },
+    instructions: [
+      'Zemiaky a vajcia uvarte natvrdo, nechajte vychladnúť a nakrájajte na plátky.',
+      'Klobásu a cibuľu nakrájajte na kolieska.',
+      'Do zapekacej misy vrstvite zemiaky, vajcia, klobásu a cibuľu.',
+      'Zalejte rozšľahanou kyslou smotanou, navrch dajte syr.',
+      'Zapekajte cca 30 min pri 180°C do zlatista.',
+    ],
+    nutrition: { kcal: 560, protein: 24, carbs: 42, fat: 32 },
   },
 ]
+
+function RecipeDetailScreen({ recipe, onBack }: { recipe: Recipe; onBack: () => void }) {
+  const { t } = useT()
+  const NUT: { key: keyof Nutrition; label: string; unit: string }[] = [
+    { key: 'kcal', label: 'Kalórie', unit: 'kcal' },
+    { key: 'protein', label: 'Bielkoviny', unit: 'g' },
+    { key: 'carbs', label: 'Sacharidy', unit: 'g' },
+    { key: 'fat', label: 'Tuky', unit: 'g' },
+  ]
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+      <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
+        <ScreenHeader title={recipe.name} onBack={onBack} />
+
+        <div style={{ display: 'flex', gap: 16, marginBottom: 20, fontSize: 13, color: t.textSec }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={14} strokeWidth={2.2} /> {recipe.time}</span>
+          <span>{recipe.servings} porcie</span>
+        </div>
+
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 18, marginBottom: 16, boxShadow: t.shadowCard }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 10 }}>Suroviny na {recipe.servings} porcie</div>
+          {recipe.ingredients.map((ing, idx) => (
+            <div key={ing} style={{
+              display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 0',
+              borderBottom: idx < recipe.ingredients.length - 1 ? `1px solid ${t.hairline}` : 'none', fontSize: 13.5,
+            }}>
+              <span style={{ color: t.text }}>{ing}</span>
+              <span style={{ color: t.textSec, fontWeight: 600, flexShrink: 0 }}>{recipe.amounts[ing]}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 18, marginBottom: 16, boxShadow: t.shadowCard }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 10 }}>Postup</div>
+          <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {recipe.instructions.map((step, idx) => (
+              <li key={idx} style={{ fontSize: 14, color: t.text, lineHeight: 1.5 }}>{step}</li>
+            ))}
+          </ol>
+        </div>
+
+        <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 18, boxShadow: t.shadowCard }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 4 }}>Nutričné hodnoty</div>
+          <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>na 1 porciu, orientačne</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            {NUT.map(n => (
+              <div key={n.key} style={{ background: t.surface2, borderRadius: 12, padding: '10px 6px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.accentInk, fontFamily: t.fontHead }}>{recipe.nutrition[n.key]}</div>
+                <div style={{ fontSize: 10.5, color: t.textMuted, marginTop: 2 }}>{n.label} ({n.unit})</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function RecipesScreen({ onBack, onAddToCart }: {
   onBack: () => void
@@ -1180,6 +1355,7 @@ function RecipesScreen({ onBack, onAddToCart }: {
   const [hits, setHits] = useState<Record<string, import('./lib/api').ProductHit | null> | null>(null)
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [detailId, setDetailId] = useState<string | null>(null)
 
   const toggleRecipe = (id: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -1209,7 +1385,13 @@ function RecipesScreen({ onBack, onAddToCart }: {
 
   useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current) }, [])
 
-  const swipe = useSwipe(undefined, onBack)
+  const swipe = useSwipe(undefined, () => { if (detailId) setDetailId(null); else onBack() })
+
+  if (detailId) {
+    const recipe = RECIPES.find(r => r.id === detailId)
+    if (recipe) return <RecipeDetailScreen recipe={recipe} onBack={() => setDetailId(null)} />
+  }
+
   return (
     <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
@@ -1285,23 +1467,35 @@ function RecipesScreen({ onBack, onAddToCart }: {
                     })}
                   </div>
 
-                  <button
-                    onClick={() => {
-                      const items = recipe.ingredients.map(ing => {
-                        const hit = hits[ing]
-                        return { query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl }
-                      })
-                      onAddToCart(items)
-                      onBack()
-                    }}
-                    style={{
-                      width: '100%', padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead,
-                      background: t.accent, color: t.accentOn, border: 'none',
-                      borderRadius: 12, cursor: 'pointer',
-                    }}
-                  >
-                    Pridať suroviny do zoznamu
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setDetailId(recipe.id)}
+                      style={{
+                        flexShrink: 0, padding: '12px 16px', fontSize: 14, fontWeight: 700, fontFamily: t.font,
+                        background: 'none', color: t.accentInk, border: `1px solid ${t.border}`,
+                        borderRadius: 12, cursor: 'pointer',
+                      }}
+                    >
+                      Recept
+                    </button>
+                    <button
+                      onClick={() => {
+                        const items = recipe.ingredients.map(ing => {
+                          const hit = hits[ing]
+                          return { query: ing, groupKey: hit?.groupKey, displayName: hit?.name ?? ing, imageUrl: hit?.imageUrl }
+                        })
+                        onAddToCart(items)
+                        onBack()
+                      }}
+                      style={{
+                        flex: 1, padding: '12px', fontSize: 14, fontWeight: 800, fontFamily: t.fontHead,
+                        background: t.accent, color: t.accentOn, border: 'none',
+                        borderRadius: 12, cursor: 'pointer',
+                      }}
+                    >
+                      Pridať suroviny do zoznamu
+                    </button>
+                  </div>
                 </>
               )}
             </div>
