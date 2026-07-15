@@ -3,7 +3,7 @@ import {
   Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Heart, Repeat2,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
 } from 'lucide-react'
-import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan } from './lib/api'
+import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan, SavingsEntry } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
 import { authClient } from './lib/authClient'
 import { Theme, ThemeMode, useThemeMode, storeBrand, storeInk } from './theme'
@@ -590,7 +590,10 @@ function ApprovalPanel({
 }
 
 // ─── SavedListCard ────────────────────────────────────────────────────────────
-function SavedListCard({ list, onDelete, onRename, onReuse }: { list: SavedList; onDelete: () => void; onRename: (name: string) => void; onReuse: () => void }) {
+function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
+  list: SavedList; onDelete: () => void; onRename: (name: string) => void; onReuse: () => void
+  onFinish: (savedAmount: number) => void
+}) {
   const { t } = useT()
   // checked: Set of "companyId:query" keys
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -599,6 +602,8 @@ function SavedListCard({ list, onDelete, onRename, onReuse }: { list: SavedList;
   // Inline premenovanie názvu zoznamu
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(list.name)
+  // Po dokončení celého zoznamu ponúkneme zmazanie + zápis do štatistík; "Nechať" stlmí ponuku
+  const [finishDismissed, setFinishDismissed] = useState(false)
 
   const commitRename = () => {
     setEditing(false)
@@ -732,6 +737,25 @@ function SavedListCard({ list, onDelete, onRename, onReuse }: { list: SavedList;
           Nenájdené: {list.unmatched.join(', ')}
         </div>
       )}
+
+      {allDone && !finishDismissed && (() => {
+        const listSaving = list.stores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.accentSoftBg, border: `1px solid ${t.accent}55`, borderRadius: 12, padding: '10px 12px', marginTop: 10 }}>
+            <span style={{ flex: 1, fontSize: 12.5, color: t.accentSoftText }}>
+              Zoznam je hotový{listSaving >= 0.01 ? ` — ušetril si ${listSaving.toFixed(2)} €` : ''}. Vymazať a pripočítať do štatistík?
+            </span>
+            <button onClick={() => onFinish(listSaving)} style={{
+              flexShrink: 0, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 8,
+              padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: t.font,
+            }}>Áno</button>
+            <button onClick={() => setFinishDismissed(true)} style={{
+              flexShrink: 0, background: 'none', color: t.textSec, border: `1px solid ${t.border}`, borderRadius: 8,
+              padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: t.font,
+            }}>Nechať</button>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -753,6 +777,9 @@ function SavedListsScreen({ onBack, onReuse }: { onBack: () => void; onReuse: (i
   const { t } = useT()
   const [lists, setLists] = useState<SavedList[]>([])
   const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<SavingsEntry[]>([])
+
+  useEffect(() => { api.getStats().then(setStats).catch(() => {}) }, [])
 
   // Vždy zoradené od najnovšieho po najstaršie podľa dátumu vytvorenia
   const byDateDesc = (arr: SavedList[]) => [...arr].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
@@ -786,11 +813,37 @@ function SavedListsScreen({ onBack, onReuse }: { onBack: () => void; onReuse: (i
     api.renameList(id, name).catch(() => {})
   }
 
+  const finishList = (list: SavedList, amount: number) => {
+    if (amount >= 0.01) {
+      setStats(prev => [{ amount, listName: list.name, recordedAt: new Date().toISOString() }, ...prev])
+      api.recordSaving(amount, list.name).catch(() => {})
+    }
+    deleteList(list.id)
+  }
+
+  // Súčty úspor za obdobia — počítané z jednotlivých záznamov (jeden na dokončený zoznam)
+  const sumSince = (days: number) => {
+    const cutoff = Date.now() - days * 86400000
+    return stats.filter(s => new Date(s.recordedAt).getTime() >= cutoff).reduce((sum, s) => sum + s.amount, 0)
+  }
+  const statTotal = stats.reduce((sum, s) => sum + s.amount, 0)
+
   const swipe = useSwipe(undefined, onBack)
   return (
     <div {...swipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
         <ScreenHeader title="Uložené zoznamy" onBack={onBack} />
+
+        {stats.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+            {[{ label: 'Týždeň', value: sumSince(7) }, { label: 'Mesiac', value: sumSince(30) }, { label: 'Celkovo', value: statTotal }].map(s => (
+              <div key={s.label} style={{ background: t.savingBg, border: `1px solid ${t.savingBorder}`, borderRadius: 14, padding: '10px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: t.savingText, fontFamily: t.fontHead }}>{s.value.toFixed(2)} €</div>
+                <div style={{ fontSize: 10.5, color: t.savingSub, marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 18, padding: 32, textAlign: 'center', color: t.textMuted, boxShadow: t.shadowCard, animation: 'shimmer 1.2s infinite' }}>
@@ -805,7 +858,7 @@ function SavedListsScreen({ onBack, onReuse }: { onBack: () => void; onReuse: (i
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {lists.map(list => (
-              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} onRename={name => renameList(list.id, name)} onReuse={() => onReuse(buildCartItemsFromList(list))} />
+              <SavedListCard key={list.id} list={list} onDelete={() => deleteList(list.id)} onRename={name => renameList(list.id, name)} onReuse={() => onReuse(buildCartItemsFromList(list))} onFinish={amount => finishList(list, amount)} />
             ))}
           </div>
         )}

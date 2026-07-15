@@ -9,6 +9,7 @@ import { toNodeHandler } from 'better-auth/node'
 import { router } from './routes/api.js'
 import { listsRouter } from './routes/lists.js'
 import { favoritesRouter } from './routes/favorites.js'
+import { statsRouter } from './routes/stats.js'
 import { auth } from './auth.js'
 import { getCache } from './services/cenysk.js'
 import { searchKompas } from './services/kompas.js'
@@ -35,6 +36,7 @@ app.all('/api/auth/*', toNodeHandler(auth))
 app.use(express.json())
 app.use('/api/v1/lists', listsRouter)
 app.use('/api/v1/favorites', favoritesRouter)
+app.use('/api/v1/stats', statsRouter)
 app.use('/api/v1', router)
 app.get('/health', (_req, res) => res.json({ ok: true }))
 

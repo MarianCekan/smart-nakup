@@ -39,6 +39,9 @@ listsRouter.get('/', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Neprihlásený' })
   try {
     await ensureTable()
+    // Nedokončené zoznamy staršie ako 7 dní tíško zmažeme (bez pripísania do štatistík —
+    // to sa robí len explicitným potvrdením cez POST /stats pri dokončení nákupu)
+    await pool.query(`DELETE FROM shopping_lists WHERE user_id = $1 AND saved_at < now() - interval '7 days'`, [userId])
     const { rows } = await pool.query(
       `SELECT id, name, saved_at, data FROM shopping_lists WHERE user_id = $1 ORDER BY saved_at DESC`,
       [userId],

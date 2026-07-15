@@ -110,6 +110,8 @@ export type FavoriteDto = {
   createdAt: string
 }
 
+export type SavingsEntry = { amount: number; listName: string | null; recordedAt: string }
+
 export type SavedListDto = {
   id: string
   name: string
@@ -135,4 +137,7 @@ export const api = {
   addFavorite: (item: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }) =>
     fetchJson<FavoriteDto>('/favorites', { method: 'POST', body: JSON.stringify(item) }),
   removeFavorite: (query: string) => fetchJson<{ ok: boolean }>(`/favorites/${encodeURIComponent(query)}`, { method: 'DELETE' }),
+  getStats: () => fetchJson<SavingsEntry[]>('/stats'),
+  recordSaving: (amount: number, listName?: string) =>
+    fetchJson<{ ok: boolean }>('/stats', { method: 'POST', body: JSON.stringify({ amount, listName }) }),
 }
