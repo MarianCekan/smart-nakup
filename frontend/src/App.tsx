@@ -618,8 +618,9 @@ function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
   // Inline premenovanie názvu zoznamu
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(list.name)
-  // Po dokončení celého zoznamu ponúkneme zmazanie + zápis do štatistík; "Nechať" stlmí ponuku
-  const [finishDismissed, setFinishDismissed] = useState(false)
+  // Po dokončení celého zoznamu ponúkneme potvrdenie (zmazanie + zápis do štatistík)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [skipNextTime, setSkipNextTime] = useState(false)
 
   const commitRename = () => {
     setEditing(false)
@@ -751,22 +752,53 @@ function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
         </div>
       )}
 
-      {allDone && !finishDismissed && (() => {
+      {allDone && (() => {
         const listSaving = list.stores.flatMap(s => s.items).reduce((sum, item) => sum + (((item as any).saving as number) || 0), 0)
+        const handleClick = () => {
+          if (localStorage.getItem('skipFinishConfirm') === 'true') onFinish(listSaving)
+          else setShowConfirm(true)
+        }
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.accentSoftBg, border: `1px solid ${t.accent}55`, borderRadius: 12, padding: '10px 12px', marginTop: 10 }}>
-            <span style={{ flex: 1, fontSize: 12.5, color: t.accentSoftText }}>
-              Zoznam je hotový{listSaving >= 0.01 ? ` — ušetril si ${listSaving.toFixed(2)} €` : ''}.
-            </span>
-            <button onClick={() => onFinish(listSaving)} style={{
-              flexShrink: 0, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 8,
-              padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: t.font,
-            }}>Dokončiť</button>
-            <button onClick={() => setFinishDismissed(true)} title="Zavrieť"
-              style={{ flexShrink: 0, display: 'flex', background: 'none', border: 'none', color: t.accentSoftText, opacity: 0.6, cursor: 'pointer', padding: 4 }}>
-              <X size={15} strokeWidth={2.4} />
+          <>
+            <button onClick={handleClick} style={{
+              width: '100%', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              background: t.accent, color: t.accentOn, border: 'none', borderRadius: 10,
+              padding: '10px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: t.font,
+            }}>
+              <Check size={14} strokeWidth={2.6} /> Nakúpené
             </button>
-          </div>
+            {showConfirm && (
+              <div onClick={() => setShowConfirm(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: t.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div onClick={e => e.stopPropagation()} style={{
+                  background: t.surface, borderRadius: 18, padding: 20, maxWidth: 320, width: '100%',
+                  boxShadow: t.shadowDrawer, fontFamily: t.font,
+                }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: t.fontHead, marginBottom: 8 }}>Dokončiť nákup?</div>
+                  <div style={{ fontSize: 13, color: t.textSec, marginBottom: 14, lineHeight: 1.4 }}>
+                    Zoznam sa vymaže{listSaving >= 0.01 ? ` a ušetrených ${listSaving.toFixed(2)} € pribudne do štatistík` : ''}.
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: t.textMuted, marginBottom: 16, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={skipNextTime} onChange={e => setSkipNextTime(e.target.checked)} />
+                    Nabudúce sa už nepýtať
+                  </label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setShowConfirm(false)} style={{
+                      flex: 1, background: 'none', border: `1px solid ${t.border}`, borderRadius: 10,
+                      padding: '9px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: t.text, fontFamily: t.font,
+                    }}>Zrušiť</button>
+                    <button onClick={() => {
+                      if (skipNextTime) localStorage.setItem('skipFinishConfirm', 'true')
+                      setShowConfirm(false)
+                      onFinish(listSaving)
+                    }} style={{
+                      flex: 1, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 10,
+                      padding: '9px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: t.font,
+                    }}>Áno, dokončiť</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )
       })()}
     </div>
