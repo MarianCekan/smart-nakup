@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
 import {
-  Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Heart, Repeat2,
+  Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Plus, Heart, Repeat2,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
-  CalendarDays, Sparkles,
+  CalendarDays, Sparkles, StickyNote,
 } from 'lucide-react'
 import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan, SavingsEntry, MealPlanEntry } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
@@ -416,11 +416,16 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
 }
 
 // ─── ResultCard ───────────────────────────────────────────────────────────────
-function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
+function ResultCard({ group, onUpdateItem }: {
+  group: OptimizeResult['stores'][0]
+  onUpdateItem: (companyId: string, query: string, patch: { qty?: number; note?: string }) => void
+}) {
   const { t } = useT()
   const b = storeBrand(group.storeName)
   const ink = storeInk(group.storeName, t.isDark)
   const headText = b.text ?? '#fff'
+  const [editingNote, setEditingNote] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
   return (
     <div style={{ borderRadius: 18, overflow: 'hidden', border: `1px solid ${t.border}`, background: t.surface, boxShadow: t.shadowCard }}>
       <div style={{ background: b.main, padding: '13px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -431,52 +436,94 @@ function ResultCard({ group }: { group: OptimizeResult['stores'][0] }) {
         <span style={{ color: headText, fontWeight: 800, fontSize: 20, fontFamily: t.fontHead }}>{group.subtotal.toFixed(2)} €</span>
       </div>
       <div style={{ padding: '4px 14px' }}>
-        {group.items.map((item, i) => (
+        {group.items.map((item, i) => {
+          const qty = item.qty ?? 1
+          const key = `${group.companyId}:${item.query}`
+          const isEditingNote = editingNote === key
+          return (
           <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 11, padding: '11px 2px',
+            padding: '11px 2px',
             borderBottom: i < group.items.length - 1 ? `1px solid ${t.hairline}` : 'none',
           }}>
-            <ProductImg src={item.imageUrl} size={36} zoomable />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: t.text, fontFamily: t.font }}>{item.query}</div>
-              {(item.name !== item.query || item.packageSize > 0) && (
-                <div style={{ fontSize: 12, color: t.textSec, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: t.font }}>
-                  {item.name !== item.query ? item.name : ''}
-                  {item.name !== item.query && item.packageSize > 0 ? ' · ' : ''}
-                  {item.packageSize > 0 ? `${item.packageSize}${item.unit}` : ''}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <ProductImg src={item.imageUrl} size={36} zoomable />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: t.text, fontFamily: t.font }}>{item.query}</div>
+                {(item.name !== item.query || item.packageSize > 0) && (
+                  <div style={{ fontSize: 12, color: t.textSec, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: t.font }}>
+                    {item.name !== item.query ? item.name : ''}
+                    {item.name !== item.query && item.packageSize > 0 ? ' · ' : ''}
+                    {item.packageSize > 0 ? `${item.packageSize}${item.unit}` : ''}
+                  </div>
+                )}
+                <button onClick={() => { setEditingNote(key); setNoteDraft(item.note ?? '') }} style={{
+                  display: 'flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer',
+                  color: t.textFaint, fontSize: 10.5, fontStyle: 'italic', padding: 0, marginTop: 2, fontFamily: t.font,
+                }}>
+                  <StickyNote size={10.5} strokeWidth={2} />
+                  {item.note ? item.note : 'poznámka'}
+                </button>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginBottom: 4 }}>
+                  <button onClick={() => onUpdateItem(group.companyId, item.query, { qty: Math.max(1, qty - 1) })} style={{
+                    width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 6, cursor: 'pointer', color: t.textSec, padding: 0,
+                  }}><Minus size={11} strokeWidth={2.4} /></button>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: t.text, minWidth: 14, textAlign: 'center' }}>{qty}</span>
+                  <button onClick={() => onUpdateItem(group.companyId, item.query, { qty: qty + 1 })} style={{
+                    width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: t.surface2, border: `1px solid ${t.border}`, borderRadius: 6, cursor: 'pointer', color: t.textSec, padding: 0,
+                  }}><Plus size={11} strokeWidth={2.4} /></button>
                 </div>
-              )}
+                <div style={{ fontWeight: 800, color: ink, fontSize: 17, fontFamily: t.fontHead }}>{(item.price * qty).toFixed(2)} €</div>
+                {formatNormPrice(item.normPrice, item.normUnit) && (
+                  <div style={{ fontSize: 11, color: t.textMuted, fontFamily: t.font }}>{formatNormPrice(item.normPrice, item.normUnit)}</div>
+                )}
+                {(item as any).saving > 0 && (
+                  <div style={{ fontSize: 11, color: t.accentInk, fontWeight: 600, marginTop: 1, fontFamily: t.font }}>
+                    ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
+                  </div>
+                )}
+                <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
+                {item.allStores.length > 1 && (
+                  <div style={{ fontSize: 11, marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', fontFamily: t.font }}>
+                    {item.allStores
+                      .filter((s: any) => s.storeName !== group.storeName)
+                      .slice(0, 2)
+                      .map((s: any) => {
+                        const diff = parseFloat((s.price - item.price).toFixed(2))
+                        const plus = diff > 0
+                        return (
+                          <span key={s.storeName} style={{ color: plus ? t.diffPlus : t.diffMinus }}>
+                            {s.storeName} {plus ? '+' : ''}{diff.toFixed(2)}€
+                          </span>
+                        )
+                      })}
+                  </div>
+                )}
+              </div>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontWeight: 800, color: ink, fontSize: 17, fontFamily: t.fontHead }}>{item.price.toFixed(2)} €</div>
-              {formatNormPrice(item.normPrice, item.normUnit) && (
-                <div style={{ fontSize: 11, color: t.textMuted, fontFamily: t.font }}>{formatNormPrice(item.normPrice, item.normUnit)}</div>
-              )}
-              {(item as any).saving > 0 && (
-                <div style={{ fontSize: 11, color: t.accentInk, fontWeight: 600, marginTop: 1, fontFamily: t.font }}>
-                  ušetríš {((item as any).saving as number).toFixed(2)} € vs {(item as any).worstStore}
-                </div>
-              )}
-              <div style={{ marginTop: 3 }}><PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} /></div>
-              {item.allStores.length > 1 && (
-                <div style={{ fontSize: 11, marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', fontFamily: t.font }}>
-                  {item.allStores
-                    .filter((s: any) => s.storeName !== group.storeName)
-                    .slice(0, 2)
-                    .map((s: any) => {
-                      const diff = parseFloat((s.price - item.price).toFixed(2))
-                      const plus = diff > 0
-                      return (
-                        <span key={s.storeName} style={{ color: plus ? t.diffPlus : t.diffMinus }}>
-                          {s.storeName} {plus ? '+' : ''}{diff.toFixed(2)}€
-                        </span>
-                      )
-                    })}
-                </div>
-              )}
-            </div>
+            {isEditingNote && (
+              <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                <input
+                  autoFocus value={noteDraft} onChange={e => setNoteDraft(e.target.value)}
+                  placeholder="napr. potrebujem 5kg dokopy"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { onUpdateItem(group.companyId, item.query, { note: noteDraft.trim() }); setEditingNote(null) }
+                    if (e.key === 'Escape') setEditingNote(null)
+                  }}
+                  onBlur={() => { onUpdateItem(group.companyId, item.query, { note: noteDraft.trim() }); setEditingNote(null) }}
+                  style={{
+                    flex: 1, fontSize: 12, padding: '5px 8px', borderRadius: 8, fontFamily: t.font,
+                    border: `1px solid ${t.accent}`, background: t.surface2, color: t.text, outline: 'none',
+                  }}
+                />
+              </div>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -755,9 +802,19 @@ function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
                         }}>
                           {itemDone && <Check size={12} strokeWidth={3.2} color={t.accentOn} />}
                         </div>
-                        <span style={{ flex: 1, fontSize: 13, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>{item.name}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 13, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>
+                            {item.name}{(item.qty ?? 1) > 1 ? ` ×${item.qty}` : ''}
+                          </span>
+                          {item.note && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10.5, color: t.textFaint, fontStyle: 'italic', marginTop: 1 }}>
+                              <StickyNote size={10} strokeWidth={2} />
+                              {item.note}
+                            </div>
+                          )}
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>{item.price.toFixed(2)} €</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: itemDone ? t.textMuted : t.text, textDecoration: itemDone ? 'line-through' : 'none' }}>{(item.price * (item.qty ?? 1)).toFixed(2)} €</span>
                           {!itemDone && <PromoBadge from={(item as any).promoFrom} until={(item as any).promoUntil} />}
                         </div>
                       </div>
@@ -1948,6 +2005,26 @@ function AppInner() {
   // Obchody podľa zvoleného plánu (fallback na predvolené result.stores)
   const displayStores = (result?.plans?.find(p => p.key === planKey)?.stores) ?? result?.stores ?? []
 
+  // Množstvo a poznámka sú len klientský stav navrstvený na výsledok optimalizácie —
+  // menia sa vo všetkých plánoch naraz (nielen v práve zobrazenom), aby prepnutie
+  // plánu prepínač neresetlo. Subtotal prepočítame hneď, nech je vždy konzistentný.
+  const updateResultItem = (companyId: string, query: string, patch: { qty?: number; note?: string }) => {
+    setResult(prev => {
+      if (!prev) return prev
+      const applyToStores = (stores: OptimizeResult['stores']) => stores.map(g => {
+        if (g.companyId !== companyId) return g
+        const items = g.items.map(it => it.query === query ? { ...it, ...patch } : it)
+        const subtotal = items.reduce((s, it) => s + it.price * (it.qty ?? 1), 0)
+        return { ...g, items, subtotal }
+      })
+      return {
+        ...prev,
+        stores: applyToStores(prev.stores),
+        plans: prev.plans ? prev.plans.map(p => ({ ...p, stores: applyToStores(p.stores) })) : prev.plans,
+      }
+    })
+  }
+
   const saveResult = async () => {
     if (!result) return
     const storeNames = [...displayStores]
@@ -2294,7 +2371,7 @@ function AppInner() {
               ) : null
             })()}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {displayStores.map(g => <ResultCard key={g.companyId} group={g} />)}
+              {displayStores.map(g => <ResultCard key={g.companyId} group={g} onUpdateItem={updateResultItem} />)}
             </div>
             {result.unmatched.length > 0 && (
               <div style={{ marginTop: 10, background: t.warnBg, border: `1px solid ${t.warnBorder}`, borderRadius: 12, padding: 14, fontSize: 13 }}>

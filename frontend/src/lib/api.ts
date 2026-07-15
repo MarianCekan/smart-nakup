@@ -79,6 +79,8 @@ export type StoreGroup = {
     worstStore?: string | null
     normPrice?: number | null
     normUnit?: 'kg' | 'l' | null
+    qty?: number
+    note?: string
   }[]
   subtotal: number
 }
