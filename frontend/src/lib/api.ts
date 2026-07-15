@@ -111,6 +111,7 @@ export type FavoriteDto = {
 }
 
 export type SavingsEntry = { amount: number; listName: string | null; recordedAt: string }
+export type MealPlanEntry = { date: string; recipeId: string }
 
 export type SavedListDto = {
   id: string
@@ -140,4 +141,8 @@ export const api = {
   getStats: () => fetchJson<SavingsEntry[]>('/stats'),
   recordSaving: (amount: number, listName?: string) =>
     fetchJson<{ ok: boolean }>('/stats', { method: 'POST', body: JSON.stringify({ amount, listName }) }),
+  getMealPlan: () => fetchJson<MealPlanEntry[]>('/mealplan'),
+  planMeal: (date: string, recipeId: string) =>
+    fetchJson<{ ok: boolean }>('/mealplan', { method: 'POST', body: JSON.stringify({ date, recipeId }) }),
+  unplanMeal: (date: string) => fetchJson<{ ok: boolean }>(`/mealplan/${date}`, { method: 'DELETE' }),
 }

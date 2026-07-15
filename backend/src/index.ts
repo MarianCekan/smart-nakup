@@ -10,6 +10,7 @@ import { router } from './routes/api.js'
 import { listsRouter } from './routes/lists.js'
 import { favoritesRouter } from './routes/favorites.js'
 import { statsRouter } from './routes/stats.js'
+import { mealPlanRouter } from './routes/mealplan.js'
 import { auth } from './auth.js'
 import { getCache } from './services/cenysk.js'
 import { searchKompas } from './services/kompas.js'
@@ -37,6 +38,7 @@ app.use(express.json())
 app.use('/api/v1/lists', listsRouter)
 app.use('/api/v1/favorites', favoritesRouter)
 app.use('/api/v1/stats', statsRouter)
+app.use('/api/v1/mealplan', mealPlanRouter)
 app.use('/api/v1', router)
 app.get('/health', (_req, res) => res.json({ ok: true }))
 

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback, createContext, useContext } f
 import {
   Search, Menu, ChevronLeft, ChevronUp, ChevronDown, Check, X, Minus, Heart, Repeat2,
   ShoppingCart, CookingPot, Clock, ClipboardList, LogOut, Mail, Sun, Moon, Monitor, RefreshCw,
+  CalendarDays, Sparkles,
 } from 'lucide-react'
-import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan, SavingsEntry } from './lib/api'
+import { api, Store, ProductHit, OptimizeResult, NeedsApproval, FavoriteDto, Plan, SavingsEntry, MealPlanEntry } from './lib/api'
 import { useDebounce } from './hooks/useDebounce'
 import { authClient } from './lib/authClient'
 import { Theme, ThemeMode, useThemeMode, storeBrand, storeInk } from './theme'
@@ -1347,6 +1348,156 @@ function RecipeDetailScreen({ recipe, onBack }: { recipe: Recipe; onBack: () => 
   )
 }
 
+// ─── Plánovač jedálnička ──────────────────────────────────────────────────────
+function isoDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function MealPlanScreen({ onBack }: { onBack: () => void }) {
+  const { t } = useT()
+  const [hits, setHits] = useState<Record<string, ProductHit | null> | null>(null)
+  const [plan, setPlan] = useState<Record<string, string>>({})
+  const [pickerDate, setPickerDate] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const all = [...new Set(RECIPES.flatMap(r => r.ingredients))]
+    api.checkIngredients(all).then(setHits).catch(() => setHits({}))
+    api.getMealPlan().then(entries => setPlan(Object.fromEntries(entries.map(e => [e.date, e.recipeId])))).catch(() => {})
+  }, [])
+
+  const days = [...Array(14)].map((_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    return d
+  })
+
+  const recommended = hits ? RECIPES.filter(r => r.ingredients.every(i => hits[i])) : []
+
+  const assign = (date: string, recipeId: string) => {
+    setPlan(prev => ({ ...prev, [date]: recipeId }))
+    setPickerDate(null)
+    api.planMeal(date, recipeId).catch(() => {})
+  }
+  const unassign = (date: string) => {
+    setPlan(prev => { const next = { ...prev }; delete next[date]; return next })
+    api.unplanMeal(date).catch(() => {})
+  }
+
+  if (detailId) {
+    const recipe = RECIPES.find(r => r.id === detailId)
+    if (recipe) return <RecipeDetailScreen recipe={recipe} onBack={() => setDetailId(null)} />
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
+      <div style={{ maxWidth: 660, margin: '0 auto', padding: '28px 16px 64px' }}>
+        <ScreenHeader title="Plánovač jedálnička" onBack={onBack} />
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: t.textSec, marginBottom: 10 }}>
+            <Sparkles size={15} strokeWidth={2.2} color={t.accentInk} /> Odporúčané z akcií
+          </div>
+          {hits === null && <div style={{ fontSize: 13, color: t.textMuted }}>Kontrolujem akcie…</div>}
+          {hits !== null && recommended.length === 0 && (
+            <div style={{ fontSize: 13, color: t.textMuted }}>Momentálne nemá žiadny recept všetky suroviny v akcii.</div>
+          )}
+          {recommended.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              {recommended.map(r => (
+                <div key={r.id} onClick={() => setDetailId(r.id)} style={{
+                  flexShrink: 0, width: 150, background: t.accentSoftBg, border: `1px solid ${t.accent}55`,
+                  borderRadius: 14, padding: 12, cursor: 'pointer',
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: t.accentSoftText, fontFamily: t.fontHead, marginBottom: 4 }}>{r.name}</div>
+                  <div style={{ fontSize: 11, color: t.accentSoftText, opacity: 0.8 }}>{r.time} · všetko v akcii</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {days.map(d => {
+            const date = isoDate(d)
+            const recipeId = plan[date]
+            const recipe = recipeId ? RECIPES.find(r => r.id === recipeId) : null
+            const isToday = date === isoDate(new Date())
+            return (
+              <div key={date} style={{
+                display: 'flex', alignItems: 'center', gap: 12, background: t.surface,
+                border: `1px solid ${isToday ? t.accent + '55' : t.border}`, borderRadius: 14, padding: '10px 14px', boxShadow: t.shadowCard,
+              }}>
+                <div style={{ width: 54, flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, color: t.textMuted, textTransform: 'capitalize' }}>{d.toLocaleDateString('sk-SK', { weekday: 'short' })}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: t.fontHead }}>{d.getDate()}.{d.getMonth() + 1}.</div>
+                </div>
+                {recipe ? (
+                  <>
+                    <div onClick={() => setDetailId(recipe.id)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recipe.name}</div>
+                      <div style={{ fontSize: 11.5, color: t.textMuted }}>{recipe.time}</div>
+                    </div>
+                    <button onClick={() => unassign(date)} title="Zrušiť" style={{
+                      flexShrink: 0, display: 'flex', background: 'none', border: 'none', color: t.textMuted, opacity: 0.7, cursor: 'pointer', padding: 4,
+                    }}>
+                      <X size={16} strokeWidth={2.4} />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setPickerDate(date)} style={{
+                    flex: 1, textAlign: 'left', background: 'none', border: `1px dashed ${t.border}`, borderRadius: 10,
+                    padding: '8px 10px', fontSize: 13, color: t.textMuted, cursor: 'pointer', fontFamily: t.font,
+                  }}>
+                    + Naplánovať recept
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {pickerDate && (
+          <div onClick={() => setPickerDate(null)} style={{
+            position: 'fixed', inset: 0, zIndex: 1000, background: t.scrim,
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: t.surface, borderRadius: '20px 20px 0 0', padding: 18, maxWidth: 660, width: '100%',
+              maxHeight: '75vh', overflowY: 'auto', boxShadow: t.shadowDrawer,
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, marginBottom: 12 }}>Vyber recept</div>
+              {[...RECIPES].sort((a, b) => {
+                const aOn = hits && a.ingredients.every(i => hits[i]) ? 1 : 0
+                const bOn = hits && b.ingredients.every(i => hits[i]) ? 1 : 0
+                return bOn - aOn
+              }).map(r => {
+                const allOnSale = hits && r.ingredients.every(i => hits[i])
+                return (
+                  <div key={r.id} onClick={() => assign(pickerDate, r.id)} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    padding: '11px 8px', borderBottom: `1px solid ${t.hairline}`, cursor: 'pointer',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{r.name}</div>
+                      <div style={{ fontSize: 11.5, color: t.textMuted }}>{r.time}</div>
+                    </div>
+                    {allOnSale && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: t.accentInk, background: t.accentSoftBg, borderRadius: 999, padding: '3px 8px', flexShrink: 0 }}>
+                        v akcii
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function RecipesScreen({ onBack, onAddToCart }: {
   onBack: () => void
   onAddToCart: (items: { query: string; groupKey?: string; displayName: string; imageUrl?: string | null }[]) => void
@@ -1521,16 +1672,17 @@ function RecipesScreen({ onBack, onAddToCart }: {
 function Drawer({ screen, session, onNavigate, onClose, onLogout }: {
   screen: string
   session: { user: { email: string; name?: string | null } }
-  onNavigate: (s: 'main' | 'recipes' | 'saved') => void
+  onNavigate: (s: 'main' | 'recipes' | 'saved' | 'mealplan') => void
   onClose: () => void
   onLogout: () => void
 }) {
   const { t, mode, setMode } = useT()
   const initial = (session.user.name || session.user.email || '?')[0].toUpperCase()
 
-  const NAV: { label: string; screen: 'main' | 'recipes' | 'saved'; icon: React.ReactNode }[] = [
+  const NAV: { label: string; screen: 'main' | 'recipes' | 'saved' | 'mealplan'; icon: React.ReactNode }[] = [
     { label: 'Nákup', screen: 'main', icon: <ShoppingCart size={18} strokeWidth={2} /> },
     { label: 'Recepty', screen: 'recipes', icon: <CookingPot size={18} strokeWidth={2} /> },
+    { label: 'Plánovač', screen: 'mealplan', icon: <CalendarDays size={18} strokeWidth={2} /> },
     { label: 'Moje zoznamy', screen: 'saved', icon: <ClipboardList size={18} strokeWidth={2} /> },
   ]
 
@@ -1614,7 +1766,7 @@ function Drawer({ screen, session, onNavigate, onClose, onLogout }: {
 // ─── AppInner ─────────────────────────────────────────────────────────────────
 function AppInner() {
   const { t } = useT()
-  const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify' | 'recipes'>('main')
+  const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify' | 'recipes' | 'mealplan'>('main')
   const [menuOpen, setMenuOpen] = useState(false)
   const [verifyEmail, setVerifyEmail] = useState('')
   const { data: session, isPending: sessionLoading } = authClient.useSession()
@@ -1768,6 +1920,16 @@ function AppInner() {
           items.forEach(item => setCartItems(prev => prev.some(i => i.query === item.query) ? prev : [...prev, item]))
         }}
       />
+      {menuOpen && session && (
+        <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
+          onNavigate={s => { setScreen(s); setMenuOpen(false) }}
+          onLogout={() => { authClient.signOut(); setMenuOpen(false); setCartItems([]); setResult(null); setScreen('main') }} />
+      )}
+    </>
+  )
+  if (screen === 'mealplan') return (
+    <>
+      <MealPlanScreen onBack={() => setScreen('main')} />
       {menuOpen && session && (
         <Drawer screen={screen} session={session} onClose={() => setMenuOpen(false)}
           onNavigate={s => { setScreen(s); setMenuOpen(false) }}
