@@ -175,6 +175,8 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
   const debouncedQ = useDebounce(value, 280)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Zabráni duchovému mouseenter+click po dotyku, aby hneď znova nezavreli badge tooltip
+  const touchHandledRef = useRef(false)
 
   // Close dropdown only when tapping/clicking outside the whole component
   useEffect(() => {
@@ -341,9 +343,23 @@ function TypeaheadInput({ onAdd }: { onAdd: (item: CartItem) => void }) {
                   }}
                   onMouseLeave={() => setHoveredKey(null)}
                   onClick={e => {
-                    // Na dotykových zariadeniach hover nefunguje — klik na "Kaufland +N" prepne zoznam obchodov
                     if (hit.storeCount <= 1) return
+                    // stopPropagation VŽDY (inak by duchový click po dotyku prebublal na <li> a pridal
+                    // položku do košíka). Samotné prepnutie tooltipu preskočíme, ak ho už spracoval
+                    // touchend nižšie — mobil po dotyku posiela aj duchový mouseenter+click.
                     e.stopPropagation()
+                    if (touchHandledRef.current) return
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
+                    setHoveredKey(prev => prev === hit.groupKey ? null : hit.groupKey)
+                  }}
+                  onTouchEnd={e => {
+                    if (hit.storeCount <= 1) return
+                    // Zabráni prehliadaču vystreliť po dotyku aj mouseenter/click duchov (tie by
+                    // tooltip hneď znova zavreli) — tento dotyk sme si vybavili sami.
+                    e.preventDefault()
+                    touchHandledRef.current = true
+                    setTimeout(() => { touchHandledRef.current = false }, 400)
                     const r = e.currentTarget.getBoundingClientRect()
                     setHoverPos({ right: window.innerWidth - r.right, top: r.bottom + 4 })
                     setHoveredKey(prev => prev === hit.groupKey ? null : hit.groupKey)
