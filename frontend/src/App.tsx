@@ -1507,9 +1507,9 @@ function MealPlanScreen({ onBack, onAddToCart }: {
             {[1, 2, 3, 4].map(n => (
               <button key={n} onClick={() => setAutoSpan(n)} style={{
                 width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontFamily: t.font, flexShrink: 0,
-                border: `1px solid ${autoSpan === n ? t.accent : t.border}`,
-                background: autoSpan === n ? t.accentSoftBg : 'none',
-                color: autoSpan === n ? t.accentSoftText : t.textSec,
+                border: `1px solid ${n <= autoSpan ? t.accent : t.border}`,
+                background: n <= autoSpan ? t.accentSoftBg : 'none',
+                color: n <= autoSpan ? t.accentSoftText : t.textSec,
                 fontSize: 12.5, fontWeight: 700,
               }}>{n}</button>
             ))}
@@ -1595,9 +1595,9 @@ function MealPlanScreen({ onBack, onAddToCart }: {
                 {[1, 2, 3, 4].map(n => (
                   <button key={n} onClick={() => setSpanDays(n)} style={{
                     width: 30, height: 30, borderRadius: 9, cursor: 'pointer', fontFamily: t.font,
-                    border: `1px solid ${spanDays === n ? t.accent : t.border}`,
-                    background: spanDays === n ? t.accentSoftBg : 'none',
-                    color: spanDays === n ? t.accentSoftText : t.textSec,
+                    border: `1px solid ${n <= spanDays ? t.accent : t.border}`,
+                    background: n <= spanDays ? t.accentSoftBg : 'none',
+                    color: n <= spanDays ? t.accentSoftText : t.textSec,
                     fontSize: 13, fontWeight: 700,
                   }}>{n}</button>
                 ))}
