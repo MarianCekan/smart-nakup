@@ -1417,6 +1417,10 @@ function AppInner() {
     await runOptimize(newItems)
   }
 
+  // Hook musí bežať pri KAŽDOM render-i (aj keď nižšie vrátime iný screen) — inak
+  // React nahlási "Rendered fewer hooks than expected" pri prepnutí obrazovky.
+  const mainSwipe = useSwipe(() => { if (session) setMenuOpen(true) }, undefined)
+
   if (screen === 'login') return <LoginScreen onSwitch={() => setScreen('register')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onSuccess={() => setScreen('main')} />
   if (screen === 'register') return <RegisterScreen onSwitch={() => setScreen('login')} onBack={() => { setCartItems([]); setResult(null); setScreen('main') }} onVerify={email => { setVerifyEmail(email); setScreen('verify') }} />
   if (screen === 'verify') return <VerifyEmailScreen email={verifyEmail} onBack={() => setScreen('main')} />
@@ -1449,7 +1453,6 @@ function AppInner() {
   )
 
   const allSel = stores.length > 0 && stores.every(s => selectedNames.includes(s.name))
-  const mainSwipe = useSwipe(() => { if (session) setMenuOpen(true) }, undefined)
 
   return (
     <div {...mainSwipe} style={{ minHeight: '100vh', background: t.bg, fontFamily: t.font }}>
