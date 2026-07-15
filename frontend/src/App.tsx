@@ -658,32 +658,29 @@ function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
       border: `1px solid ${allDone ? t.accent + '55' : t.border}`,
       borderRadius: 18, padding: 16, boxShadow: t.shadowCard, transition: 'background 0.2s', fontFamily: t.font,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {editing ? (
-              <input
-                autoFocus value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setDraft(list.name); setEditing(false) } }}
-                style={{
-                  fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em',
-                  background: t.surface2, border: `1px solid ${t.accent}`, borderRadius: 8, padding: '3px 8px',
-                  outline: 'none', width: '100%', maxWidth: 240,
-                }}
-              />
-            ) : (
-              <span onClick={() => { setDraft(list.name); setEditing(true) }} title="Kliknutím premenuješ"
-                style={{ fontWeight: 700, fontSize: 15, color: allDone ? t.doneText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em', cursor: 'pointer' }}>
-                {list.name}
-              </span>
-            )}
-            {allDone && !editing && <span style={{ fontSize: 11, fontWeight: 700, color: t.accentSoftText, background: t.accentSoftBg, padding: '2px 9px', borderRadius: 999, flexShrink: 0 }}>Hotové</span>}
-          </div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          {editing ? (
+            <input
+              autoFocus value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setDraft(list.name); setEditing(false) } }}
+              style={{
+                fontWeight: 700, fontSize: 15, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em',
+                background: t.surface2, border: `1px solid ${t.accent}`, borderRadius: 8, padding: '3px 8px',
+                outline: 'none', width: '100%',
+              }}
+            />
+          ) : (
+            <span onClick={() => { setDraft(list.name); setEditing(true) }} title="Kliknutím premenuješ"
+              style={{ fontWeight: 700, fontSize: 15, color: allDone ? t.doneText : t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em', cursor: 'pointer' }}>
+              {list.name}
+            </span>
+          )}
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{new Date(list.savedAt).toLocaleString('sk-SK')}</div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
           <button onClick={onReuse} title="Použiť ako šablónu pre nový nákup"
             style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: `1px solid ${t.border}`, borderRadius: 10, padding: '5px 12px', cursor: 'pointer', color: t.accentInk, fontSize: 12, fontWeight: 600, fontFamily: t.font }}>
             <Repeat2 size={13} strokeWidth={2.2} /> Použiť znova
@@ -759,16 +756,16 @@ function SavedListCard({ list, onDelete, onRename, onReuse, onFinish }: {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.accentSoftBg, border: `1px solid ${t.accent}55`, borderRadius: 12, padding: '10px 12px', marginTop: 10 }}>
             <span style={{ flex: 1, fontSize: 12.5, color: t.accentSoftText }}>
-              Zoznam je hotový{listSaving >= 0.01 ? ` — ušetril si ${listSaving.toFixed(2)} €` : ''}. Vymazať a pripočítať do štatistík?
+              Zoznam je hotový{listSaving >= 0.01 ? ` — ušetril si ${listSaving.toFixed(2)} €` : ''}.
             </span>
             <button onClick={() => onFinish(listSaving)} style={{
               flexShrink: 0, background: t.accent, color: t.accentOn, border: 'none', borderRadius: 8,
               padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: t.font,
-            }}>Áno</button>
-            <button onClick={() => setFinishDismissed(true)} style={{
-              flexShrink: 0, background: 'none', color: t.textSec, border: `1px solid ${t.border}`, borderRadius: 8,
-              padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: t.font,
-            }}>Nechať</button>
+            }}>Dokončiť</button>
+            <button onClick={() => setFinishDismissed(true)} title="Zavrieť"
+              style={{ flexShrink: 0, display: 'flex', background: 'none', border: 'none', color: t.accentSoftText, opacity: 0.6, cursor: 'pointer', padding: 4 }}>
+              <X size={15} strokeWidth={2.4} />
+            </button>
           </div>
         )
       })()}
