@@ -315,12 +315,25 @@ async function _doSearch(query: string, limit: number): Promise<ProductGroup[]> 
   const nested = await Promise.all(allHtmls.map(({ slug, html }) => fetchProductGroups(slug, html)))
   // Dedup — ten istý produkt sa objavuje vo viacerých kategóriách (slugoch)
   const seen = new Set<string>()
-  const valid = nested.flat().filter(g => {
+  let valid = nested.flat().filter(g => {
     const k = `${deaccent(g.name)}|${g.bestPrice}`
     if (seen.has(k)) return false
     seen.add(k)
     return true
   })
+
+  // Neúplné slovo ("mlie" namiesto "mlieko") nemá vlastnú kategóriu na kompase, takže
+  // priamy fetch aj /hladaj vrátia buď prázdno, alebo len nesúvisiace produkty. Prilej
+  // do mixu aj produkty, ktoré už poznáme z predošlých hľadaní/warm-upu — skórovanie
+  // nižšie si aj tak vyberie len relevantné zhody, netreba čakať kým dopíše celé slovo.
+  const qDeaccent = deaccent(query.trim())
+  for (const g of _cache.values()) {
+    if (!deaccent(g.name).includes(qDeaccent)) continue
+    const k = `${deaccent(g.name)}|${g.bestPrice}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    valid.push(g)
+  }
 
   const q = deaccent(query.trim())
   const qWords = q.split(/\s+/).filter(w => w.length > 1)
