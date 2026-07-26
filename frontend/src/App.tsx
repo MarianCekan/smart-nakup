@@ -1963,7 +1963,7 @@ function AppInner() {
   const [screen, setScreen] = useState<'main' | 'saved' | 'login' | 'register' | 'verify' | 'recipes' | 'mealplan'>('main')
   const [menuOpen, setMenuOpen] = useState(false)
   const [verifyEmail, setVerifyEmail] = useState('')
-  const { data: session, isPending: sessionLoading } = authClient.useSession()
+  const { data: session } = authClient.useSession()
   const [stores, setStores] = useState<Store[]>([])
   const [selectedNames, setSelectedNames] = useState<string[]>([])
   const [cartItems, setCartItems] = useState<CartItem[]>([])
@@ -2177,18 +2177,19 @@ function AppInner() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: t.text, fontFamily: t.fontHead, letterSpacing: '-0.02em' }}>SmartNákup</h1>
-          {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo menu (prihlásený) */}
-          {!sessionLoading && (
-            session
-              ? <button onClick={() => setMenuOpen(true)} style={{
-                  width: 42, height: 42, borderRadius: '50%', background: t.surface, border: `1px solid ${t.border}`,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textSec,
-                }}><Menu size={19} strokeWidth={2} /></button>
-              : <button onClick={() => setScreen('login')} style={{
-                  background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: '9px 16px',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: t.accentInk, whiteSpace: 'nowrap', fontFamily: t.font,
-                }}>Prihlásiť sa</button>
-          )}
+          {/* Vpravo: buď Prihlásiť sa (neprihlásený) alebo menu (prihlásený) — vždy viditeľné,
+              aj počas počiatočného načítavania session (predvolene ako neprihlásený), nech
+              používateľ hneď vidí čo môže urobiť namiesto prázdneho miesta */}
+          {session
+            ? <button onClick={() => setMenuOpen(true)} style={{
+                width: 42, height: 42, borderRadius: '50%', background: t.surface, border: `1px solid ${t.border}`,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textSec,
+              }}><Menu size={19} strokeWidth={2} /></button>
+            : <button onClick={() => setScreen('login')} style={{
+                background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, padding: '9px 16px',
+                cursor: 'pointer', fontSize: 13, fontWeight: 700, color: t.accentInk, whiteSpace: 'nowrap', fontFamily: t.font,
+              }}>Prihlásiť sa</button>
+          }
         </div>
 
         {wakingUp && (
