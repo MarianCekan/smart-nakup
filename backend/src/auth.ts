@@ -35,7 +35,7 @@ export const auth = betterAuth({
       const verifyUrl = url.replace(/callbackURL=[^&]+/, `callbackURL=${encodeURIComponent(frontendUrl)}`)
       console.log(`📧 Posielam overovací email na ${user.email}, url: ${verifyUrl}`)
       const result = await resend.emails.send({
-        from: 'SmartNákup <noreply@kvalityweb.sk>',
+        from: 'SmartNákup <noreply@kvalitnyweb.sk>',
         to: user.email,
         subject: 'Potvrďte svoju e-mailovú adresu',
         html: `
